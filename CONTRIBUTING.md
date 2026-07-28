@@ -22,7 +22,16 @@ choice and the web "Show fixes for" dropdown). Give it one entry per record type
 `fields` (a list of `[label, template]` pairs). Templates interpolate the same
 tokens the CLI/JS expose on a record — `{host}`, `{subhost}` (host label, blank at
 the apex), `{target}`, `{priority}`, `{weight}`, `{port}`, `{value}`, `{match}`,
-`{fqdn}`, `{qname}`, `{domain}`.
+`{fqdn}`, `{qname}`, `{domain}`. For panels that split the SRV `_service._protocol`
+label into separate fields there are also `{service}` (`_jmap`), `{protocol}`
+(`_tcp`), `{bareservice}` / `{bareprotocol}` (the same two **without** the leading
+underscore, for Plesk/METANET), `{srvhost}` (whatever remains — `@` at the apex) and
+`{srvsubhost}` (the same, but blank at the apex).
+
+If a panel needs something none of those cover, add the token to `resolve_record` in
+`verify_thundermail_dns.py` **and** `resolveRecord` in `app.js` (they must stay
+identical), then add a case to `tests/fixtures/parity_cases.json` and the tuple in
+`tests/test_parity.py` / `tests/parity/run_js.mjs` so the parity test covers it.
 
 ### Verify field conventions against the *actual panel* — not an automated fetch
 

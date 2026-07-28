@@ -12,7 +12,10 @@ Usage:
     uv run verify_thundermail_dns.py glamrocnamecheap.com
     uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
 
-Exit status is 0 only if every expected record is present and correct.
+Exit status is 0 only if every expected record is present and correct. One
+deliberate exception: the SRV weight is not compared (priority/port/target are),
+because with a single target the weight has no effect and some panels only offer a
+fixed dropdown of weights — see the exact_ignore_weight mode in records.json.
 
 Pass --provider to print exactly what to enter in that DNS provider's control
 panel for each FAILING record (accounting for provider quirks such as how the
@@ -62,6 +65,9 @@ _HOSTNAME = re.compile(
 
 _MAX_VALUE = 200  # cap displayed answer length to avoid pathological output
 
+# How to word a mismatch, per match_mode (kept in sync with app.js).
+_VERBS = {"exact": "expected", "exact_ignore_weight": "expected (any weight)"}
+
 
 def sanitize(s: str) -> str:
     """Escape control/terminal chars so untrusted DNS data can't drive the tty."""
@@ -105,6 +111,11 @@ def resolve_record(rec: dict, domain: str) -> dict:
     # Like srvhost but blank (not "@") at the apex — for Hover's SRV form, whose
     # optional Subdomain field is left empty for the root domain.
     ctx["srvsubhost"] = ".".join(labels[2:])
+    # Service/protocol WITHOUT the leading underscore — for Plesk-based panels
+    # (METANET), whose Service-Name/Protokoll fields are documented as taking the
+    # bare name ("Beispiel: SIP (ohne Unterstrich)"): "imaps"/"tcp", not "_imaps"/"_tcp".
+    ctx["bareservice"] = ctx["service"].lstrip("_")
+    ctx["bareprotocol"] = ctx["protocol"].lstrip("_")
     return ctx
 
 
@@ -118,15 +129,30 @@ def value_of(ctx: dict, cfg: dict, key: str) -> str:
     return interpolate(cfg["value_templates"][ctx["type"]][key], ctx)
 
 
+def srv_fields(record: str) -> tuple[str, str, str] | None:
+    """(priority, port, target) from an SRV record string — the fields that matter
+    when weight is ignored. None if the string isn't four space-separated fields,
+    so a malformed record can never match."""
+    parts = record.split()
+    return (parts[0], parts[2], parts[3]) if len(parts) == 4 else None
+
+
 def matches(expected: str, answers: list[str], mode: str) -> bool:
-    """True if `expected` matches any answer. mode 'exact' (MX/SRV/CNAME) requires
-    a whole-record equality so a target with extra labels appended (e.g. a missing
+    """True if `expected` matches any answer. mode 'exact' (MX/CNAME) requires a
+    whole-record equality so a target with extra labels appended (e.g. a missing
     trailing dot turning `mail.thundermail.com` into `mail.thundermail.com.example.com`)
     fails; mode 'contains' (TXT) keeps the substring test the prefix fragments
-    (MTA-STS/TLSRPT/DMARC) rely on. Case-insensitive; kept in sync with app.js."""
+    (MTA-STS/TLSRPT/DMARC) rely on; mode 'exact_ignore_weight' (SRV) is 'exact' on
+    priority/port/target but accepts any weight, because the weight only matters
+    between competing targets at the same priority — we publish a single target, and
+    some panels (Plesk/METANET) offer only a fixed dropdown of weights. Case-insensitive;
+    kept in sync with app.js."""
     exp = expected.lower()
     if mode == "exact":
         return any(exp == a.lower() for a in answers)
+    if mode == "exact_ignore_weight":
+        want = srv_fields(exp)
+        return want is not None and any(srv_fields(a.lower()) == want for a in answers)
     return any(exp in a.lower() for a in answers)
 
 
@@ -236,7 +262,7 @@ def main() -> int:
             print(f"  {GREEN}OK{RESET}   {label(rec):<46} {shown}")
             passed += 1
         else:
-            verb = "expected" if mode == "exact" else "expected to contain"
+            verb = _VERBS.get(mode, "expected to contain")
             print(f"  {RED}FAIL{RESET} {label(rec):<46} {verb}: {expected}")
             print(f"       {'':<46} got: {shown or '<empty>'}")
             failures.append(ctx)

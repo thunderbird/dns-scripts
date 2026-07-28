@@ -82,6 +82,7 @@
         <tr><td><code>hover</code></td><td>2026-07-20</td><td><strong>Unverified.</strong> From Hover's help docs + a live SRV Edit-DNS-Record screenshot; MX/TXT/CNAME not screenshotted.</td></tr>
         <tr><td><code>digitalocean</code></td><td>2026-07-21</td><td><strong>Unverified.</strong> From DigitalOcean's help docs + a live SRV Create-a-record screenshot; trailing-dot rule confirmed live on digitalocean.example.com.</td></tr>
         <tr><td><code>porkbun</code></td><td>2026-07-23</td><td><strong>Unverified.</strong> From Porkbun's KB add-record (231) + SRV (109) articles; no-trailing-dot confirmed live on porkbun.example.com.</td></tr>
+        <tr><td><code>metanet-plesk</code></td><td>2026-07-28</td><td><strong>Unverified.</strong> METANET's Plesk panel (German UI). From METANET's Plesk DNS docs + a live SRV form screenshot; no-trailing-dot confirmed live on thundermail.metanet.example.com; MX/CNAME labels not screenshotted.</td></tr>
       </tbody>
     </table>
 
@@ -207,6 +208,20 @@
         <li>Fix <code>records.json</code> if anything differs, then remove the <code>UNVERIFIED —</code> prefixes from the four <code>porkbun</code> headers, and delete the unverified notes in <a href="https://github.com/thunderbird/dns-scripts/blob/main/README.md"><code>README.md</code></a>.</li>
       </ol>
       <p><code>porkbun.example.com</code> is Porkbun-hosted (NS <code>curitiba</code>/<code>fortaleza</code>/<code>maceio</code>/<code>salvador.ns.porkbun.com</code>), so it is a ready-made target: <code>--resolver curitiba.ns.porkbun.com</code> queries Porkbun authoritatively. Its MX/TXT/CNAME records are already correct (8/13); its 5 SRV records aren't added yet, so adding them there is a good end-to-end test of the emitted <code>porkbun</code> SRV fixes.</p>
+
+      <p><strong><code>metanet-plesk</code> is unverified.</strong> To promote it (do this with a live METANET Plesk panel open):</p>
+      <ol>
+        <li>Open <strong>Websites &amp; Domains → your domain → DNS-Einstellungen → Eintrag hinzufügen</strong> and pick each type (MX / SRV / TXT / CNAME) in the <strong>Eintragstyp</strong> dropdown.</li>
+        <li>Confirm three things:
+          <ul>
+            <li>The exact German <strong>MX</strong> and <strong>CNAME</strong> field labels (we ship <code>Mail-Exchange-Server</code> and <code>Kanonischer Name</code> from Plesk's docs; only the SRV and TXT forms were screenshotted).</li>
+            <li><strong>Priorität</strong> is a dropdown for MX too, and it offers an entry for <code>10</code>.</li>
+            <li>Targets are stored <strong>verbatim without a trailing dot</strong> (confirmed live for MX/SRV on <code>thundermail.metanet.example.com</code>; re-confirm for CNAME).</li>
+          </ul>
+        </li>
+        <li>Fix <code>records.json</code> if anything differs, then remove the <code>UNVERIFIED —</code> prefixes from the <code>metanet-plesk</code> MX/SRV/CNAME headers (TXT ships without one — its form is documented), and delete the unverified notes in <a href="https://github.com/thunderbird/dns-scripts/blob/main/README.md"><code>README.md</code></a>.</li>
+      </ol>
+      <p><code>thundermail.metanet.example.com</code> is METANET-hosted (NS <code>ns1</code>/<code>ns2.hera.metanet.ch</code>), so it is a ready-made target: <code>--resolver ns1.hera.metanet.ch</code> queries METANET authoritatively. It is at 12/13 — its <code>_imaps._tcp</code> SRV target was entered as the zone apex instead of <code>mail.thundermail.com</code>, so fixing that one is a good end-to-end test of the emitted <code>metanet-plesk</code> SRV fixes.</p>
     </details>
 
     <details>
@@ -409,6 +424,85 @@
       trailing dot. To promote: <code>ovh.example.com</code> is already correctly configured on OVH, so confirm 13/13
       with <code>verify_thundermail_dns.py ovh.example.com</code> (or <code>--resolver ns200.anycast.me</code>), eyeball the
       emitted <code>ovh</code> fix strings against the live panel, then drop the <code>UNVERIFIED</code> prefixes in
+      <code>records.json</code> and the notes here and in
+      <a href="https://github.com/thunderbird/dns-scripts/blob/main/README.md"><code>README.md</code></a>.</p>
+
+      <h3 id="metanet-plesk"><code>metanet-plesk</code> (metanet.ch, Plesk panel) — unverified</h3>
+      <p>Added 2026-07-28 for internal ticket 7194 (<code>7194_METANET_PLESK</code>, sample domain
+      <code>thundermail.metanet.example.com</code>), tracked in
+      <a href="https://github.com/thunderbird/dns-scripts/issues/13">#13</a>. The first
+      <strong>Plesk</strong>-based panel we support, and the first <strong>German-language</strong> one.
+      Sources: METANET's
+      <a href="https://www.metanet.ch/de/support/dns-nameserver/dns/plesk-dns-verwaltung">Plesk: DNS-Verwaltung</a>
+      help page plus a screenshot of the live <em>Ressourceneintrag bearbeiten</em> <strong>SRV</strong>
+      form on <code>thundermail.metanet.example.com</code>. Marked <strong>unverified</strong> because the MX and
+      CNAME field labels come from Plesk's docs rather than a live add-record form.</p>
+      <p>What the docs + screenshot establish and we encoded:</p>
+      <ul>
+        <li>Records are added through a <strong>single form with an <code>Eintragstyp</code> (entry type)
+          dropdown</strong> (like <code>bunny</code>/<code>godaddy</code>/<code>hover</code>/<code>digitalocean</code>/<code>porkbun</code>,
+          not per-type sections like Cosmotown). Path: <strong>Websites &amp; Domains → your domain →
+          DNS-Einstellungen → Eintrag hinzufügen</strong>. Offered types:
+          <code>NS, A, AAAA, CNAME, MX, PTR, TXT, SRV, DS, CAA</code>.</li>
+        <li><strong>Field labels are emitted in German with an English gloss</strong> —
+          <code>Zielhost (Target host)</code> — because that is what the user sees in the panel. Every
+          other provider uses its panel's English labels.</li>
+        <li><strong><code>Domainname</code> is left empty at the apex</strong> (the <code>{subhost}</code> pattern,
+          like bunny/cosmotown/ovh/porkbun, never <code>@</code>); the form prints <code>.yourdomain.</code>
+          beside the box.</li>
+        <li>⚠️ <strong>SRV splits the label into <code>Service-Name</code> + <code>Protokoll</code> — without the
+          leading underscore.</strong> Both fields carry the hint <em>"Beispiel: SIP (ohne Unterstrich)"</em>,
+          and the live form shows <code>imaps</code> / <code>tcp</code> typed bare. The existing
+          <code>{service}</code>/<code>{protocol}</code> tokens yield <code>_imaps</code>/<code>_tcp</code> (which is what
+          GoDaddy/IONOS/Hover want), so this added <strong>two new interpreter tokens,
+          <code>{bareservice}</code> and <code>{bareprotocol}</code></strong> (in both
+          <code>verify_thundermail_dns.py</code> and <code>app.js</code>, with a parity fixture). The SRV
+          <code>Domainname</code> reuses Hover's <code>{srvsubhost}</code> (blank at the apex).</li>
+        <li>⚠️ <strong><code>Priorität</code> and <code>Relative Gewichtung</code> are dropdowns, not text
+          inputs.</strong> Priority 0 is offered (<code>sehr hoch (0)</code>), but the <strong>weight dropdown
+          only offers 0/5/10…50</strong>, so Thundermail's <code>weight: 1</code> is <strong>unenterable</strong>.
+          This is what prompted the new <strong><code>exact_ignore_weight</code></strong> match mode on
+          <code>value_templates.SRV</code>: priority/port/target still match exactly (the
+          <a href="https://github.com/thunderbird/dns-scripts/issues/10">#10</a> protection is intact)
+          but any weight passes, since weight only matters between competing targets at the same
+          priority and we publish one target per service. The <code>metanet-plesk</code> SRV block therefore
+          emits the literal dropdown entry <code>niedrig (0)</code> for the weight instead of
+          <code>{weight}</code>. Whether the <em>published</em> Thundermail weight should change to <code>0</code>
+          is <a href="https://github.com/thunderbird/dns-scripts/issues/14">#14</a>.</li>
+        <li><strong>Weight, Port and Target are three separate fields</strong> (<code>Relative Gewichtung</code> /
+          <code>Zielport</code> / <code>Zielhost</code>), so SRV uses the individual tokens like
+          <code>namecheap</code>/<code>hover</code>, not a packed <code>{value}</code>.</li>
+        <li><strong>Targets are stored verbatim — no trailing dot needed.</strong> Confirmed live: four of
+          the five SRV records on <code>thundermail.metanet.example.com</code> hold exactly
+          <code>mail.thundermail.com.</code> and the MX holds <code>10 mail.thundermail.com.</code>, i.e. Plesk
+          adds the root dot itself and does <em>not</em> append the zone name (unlike
+          <code>ovh</code>/<code>digitalocean</code>).</li>
+        <li><strong>TXT values are auto-quoted by the panel</strong> — METANET's docs spell this out ("<em>the
+          entry type TXT automatically sets the including quotation marks</em>"), so values are emitted
+          unquoted, like <code>cosmotown</code>. The field is <code>TXT-Eintrag</code>.</li>
+        <li><strong>Two-step save.</strong> New/changed entries are flagged with an exclamation mark and go
+          live only when <strong><code>Aktualisieren</code></strong> (Update) is clicked on the yellow
+          pending-changes banner; edits can be batched. All four headers say so, since users otherwise
+          assume the tool is wrong when a freshly "added" record still fails.</li>
+        <li><strong>Escape hatch documented in the headers:</strong> METANET sells a paid <em>Premium Service:
+          Individuelle DNS-Einstellungen</em> — email <code>support@metanet.ch</code> with the records and
+          their staff enter them. Unlike <code>cosmotown</code> (whose panel has no SRV section at all,
+          forcing a support hand-off), this is optional here: every record type is
+          self-serviceable.</li>
+        <li>The MX/SRV/CNAME headers carry an <code>UNVERIFIED —</code> prefix so CLI/web users see the caveat
+          inline; TXT ships without one, since its form is documented with a screenshot.</li>
+      </ul>
+      <p>Naming: the key is <code>metanet-plesk</code> rather than <code>plesk</code> because the form layout is
+      stock Plesk but the verbatim-target and auto-quoting behaviours were confirmed only on METANET's
+      build — generalise to <code>plesk</code> if another Plesk host shows up.</p>
+      <p>Still <strong>unverified</strong> against a live end-to-end add: the German <strong>MX</strong> and
+      <strong>CNAME</strong> field labels, whether the MX <code>Priorität</code> dropdown offers <code>10</code>
+      (METANET's own default template ships <code>MX 10 mail.&lt;domain&gt;.</code>, so it should), and the
+      CNAME trailing-dot behaviour. To promote: <code>thundermail.metanet.example.com</code> is at 12/13 (only the
+      misconfigured <code>_imaps._tcp</code> target is outstanding), so fix that record using the emitted
+      <code>metanet-plesk</code> SRV instructions, confirm 13/13 with
+      <code>verify_thundermail_dns.py thundermail.metanet.example.com --resolver ns1.hera.metanet.ch</code>, eyeball
+      the emitted fix strings against the live panel, then drop the <code>UNVERIFIED</code> prefixes in
       <code>records.json</code> and the notes here and in
       <a href="https://github.com/thunderbird/dns-scripts/blob/main/README.md"><code>README.md</code></a>.</p>
     </details>

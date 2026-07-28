@@ -72,6 +72,42 @@ class TestMatches(unittest.TestCase):
         self.assertFalse(v.matches(
             "v=STSv1;", ["v=spf1 include:spf.thundermail.com -all"], "contains"))
 
+    def test_ignore_weight_accepts_other_weight(self):
+        # Plesk/METANET can only pick weights in steps of 5, so weight 0 (or any
+        # other) must pass while priority/port/target still match exactly.
+        self.assertTrue(v.matches(
+            "0 1 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com"],
+            "exact_ignore_weight",
+        ))
+
+    def test_ignore_weight_still_rejects_appended_target(self):
+        # The #10 protection must survive: only the weight is exempt.
+        self.assertFalse(v.matches(
+            "0 1 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com.digitalocean.example.com"],
+            "exact_ignore_weight",
+        ))
+
+    def test_ignore_weight_rejects_wrong_priority_or_port(self):
+        self.assertFalse(v.matches(
+            "0 1 443 mail.thundermail.com",
+            ["10 0 443 mail.thundermail.com"],
+            "exact_ignore_weight",
+        ))
+        self.assertFalse(v.matches(
+            "0 1 993 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com"],
+            "exact_ignore_weight",
+        ))
+
+    def test_ignore_weight_rejects_malformed_answer(self):
+        self.assertFalse(v.matches(
+            "0 1 443 mail.thundermail.com",
+            ["0 443 mail.thundermail.com", ""],
+            "exact_ignore_weight",
+        ))
+
 
 class TestResolveRecord(unittest.TestCase):
     def test_apex_tokens(self):
@@ -87,6 +123,8 @@ class TestResolveRecord(unittest.TestCase):
         self.assertEqual(ctx["protocol"], "_tcp")
         self.assertEqual(ctx["srvhost"], "@")     # "@" at apex (GoDaddy/IONOS)
         self.assertEqual(ctx["srvsubhost"], "")   # blank at apex (Hover)
+        self.assertEqual(ctx["bareservice"], "jmap")   # no underscore (Plesk/METANET)
+        self.assertEqual(ctx["bareprotocol"], "tcp")
 
     def test_srv_non_apex_rest_label(self):
         ctx = v.resolve_record({"type": "SRV", "host": "_sip._tcp.pbx"}, "example.com")
@@ -106,12 +144,16 @@ class TestValueTemplates(unittest.TestCase):
         for rtype, tpl in CFG["value_templates"].items():
             self.assertIn("match", tpl, rtype)
             self.assertIn("value", tpl, rtype)
-            self.assertIn(tpl.get("match_mode"), ("exact", "contains"), rtype)
+            self.assertIn(tpl.get("match_mode"),
+                          ("exact", "exact_ignore_weight", "contains"), rtype)
 
     def test_target_bearing_types_are_exact(self):
-        # MX/SRV/CNAME carry a target that must match a whole answer (see #10).
-        for rtype in ("MX", "SRV", "CNAME"):
+        # MX/SRV/CNAME carry a target that must match a whole answer (see #10);
+        # SRV exempts only the weight field (see #14).
+        for rtype in ("MX", "CNAME"):
             self.assertEqual(CFG["value_templates"][rtype]["match_mode"], "exact")
+        self.assertEqual(CFG["value_templates"]["SRV"]["match_mode"],
+                         "exact_ignore_weight")
         self.assertEqual(CFG["value_templates"]["TXT"]["match_mode"], "contains")
 
 
@@ -156,6 +198,20 @@ class TestProviderRenderGolden(unittest.TestCase):
         body = "\n".join(rows)
         self.assertIn("mail.thundermail.com.", body)  # trailing dot preserved
         self.assertIn("_jmap._tcp", body)
+
+    def test_metanet_plesk_srv_uses_bare_service_and_protocol(self):
+        rows = v.render_fix_table(CFG, "metanet-plesk", "SRV", self._ctxs("SRV"))
+        body = "\n".join(rows[2:])  # skip the header, which quotes examples
+        self.assertIn("jmap", body)
+        self.assertNotIn("_jmap", body)   # Plesk wants the label without underscores
+        self.assertNotIn("_tcp", body)
+        self.assertIn("niedrig (0)", body)  # weight dropdown entry, not {weight}
+
+    def test_metanet_plesk_apex_host_is_blank(self):
+        # rows[0] is the header (which mentions support@metanet.ch) — check the
+        # rendered field rows only: the apex Host is blank, never "@".
+        rows = v.render_fix_table(CFG, "metanet-plesk", "MX", self._ctxs("MX"))
+        self.assertNotIn("@", "\n".join(rows[2:]))
 
     def test_namecheap_mx_row(self):
         rows = v.render_fix_table(CFG, "namecheap", "MX", self._ctxs("MX"))

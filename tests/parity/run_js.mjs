@@ -63,6 +63,8 @@ for (const c of resolveCases) {
     protocol: ctx.protocol,
     srvhost: ctx.srvhost,
     srvsubhost: ctx.srvsubhost,
+    bareservice: ctx.bareservice,
+    bareprotocol: ctx.bareprotocol,
     match: ctx.match,
     value: ctx.value,
   });

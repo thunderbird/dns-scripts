@@ -47,7 +47,12 @@ uv run verify_thundermail_dns.py glamrocnamecheap.com
 ```
 
 Exit status is `0` only when every expected record is present and correct, so it's
-safe to use in scripts or CI. It queries `1.1.1.1` by default (override with
+safe to use in scripts or CI. One deliberate exception: **the SRV weight is not
+compared.** Priority, port and target must match exactly, but any weight passes,
+because weight only distributes load between competing targets at the same priority
+and Thundermail publishes a single target per service — while some panels (Plesk /
+METANET) offer only a fixed dropdown of weights in steps of 5, making the documented
+`1` unenterable. See [#14](https://github.com/thunderbird/dns-scripts/issues/14). It queries `1.1.1.1` by default (override with
 `--resolver` or the `DNS_RESOLVER` environment variable) to avoid stale local
 caches. The resolver accepts an IP address or a hostname — e.g. point it at an
 authoritative nameserver to bypass public-resolver caching entirely:
@@ -78,7 +83,8 @@ uv run verify_thundermail_dns.py <domain> --resolver kiki.bunny.net
 Pass `--provider` to print, for each **failing** record, exactly what to enter in
 that DNS provider's control panel — including provider-specific quirks such as how
 the Host/Name field is written. Supported: `namecheap`, `squarespace`, `cosmotown`,
-`bunny`, `spaceship`, `godaddy`, `ionos`, `ovh`, `hover`, `digitalocean`, `porkbun`, `generic`. bunny.net's add-record form has a single
+`bunny`, `spaceship`, `godaddy`, `ionos`, `ovh`, `hover`, `digitalocean`, `porkbun`,
+`metanet-plesk`, `generic`. bunny.net's add-record form has a single
 **Value** field (no separate Priority/Weight/Port), so the `bunny` MX/SRV output puts
 the whole record string in Value; the Hostname field is left empty for the root
 ([bunny.net: DNS records](https://docs.bunny.net/docs/dns-records)). **`spaceship`
@@ -129,7 +135,27 @@ Porkbun (Cloudflare-backed) uses a single Add-record dialog with a Type dropdown
 **Priority** field, and SRV keeps the whole `_service._protocol` label in one Host with
 Weight/Port/Target packed into the Answer field. Unlike `ovh`/`digitalocean`, targets do
 **not** need a trailing dot — confirmed live on `porkbun.example.com`, whose MX and DKIM CNAME
-targets came back verbatim (Porkbun stores them as entered). Note that
+targets came back verbatim (Porkbun stores them as entered). **`metanet-plesk` is also
+unverified** — it covers [METANET](https://www.metanet.ch/)'s **Plesk** DNS panel
+(*Websites & Domains → DNS-Einstellungen → Eintrag hinzufügen*), whose SRV field layout
+is confirmed from a screenshot of the live form on a METANET-hosted zone, while the
+German MX/CNAME field labels come from Plesk's docs rather than a live add-record form,
+so its headers flag this
+([METANET: Plesk DNS-Verwaltung](https://www.metanet.ch/de/support/dns-nameserver/dns/plesk-dns-verwaltung)).
+The panel is **German-language**, so the emitted field labels are German with an English
+gloss (`Zielhost (Target host)`). Plesk's quirks: `Domainname` is left **empty** for the
+root (never `@`); it splits the SRV label into **Service-Name** and **Protokoll** like
+GoDaddy/IONOS/Hover but wants them **without the leading underscore** (`imaps`, `tcp` —
+the `{bareservice}`/`{bareprotocol}` tokens exist for this); **Priorität** and **Relative
+Gewichtung** are dropdowns rather than free text, and the weight dropdown only offers
+0/5/10…50, so Thundermail's weight of `1` cannot be entered (hence the ignored-weight
+matching above, and [#14](https://github.com/thunderbird/dns-scripts/issues/14));
+targets are stored **verbatim with no trailing dot** (Plesk adds the root dot itself —
+confirmed live); TXT values are **auto-quoted** by the panel, so they're emitted
+unquoted (like `cosmotown`); and nothing goes live until you click **Aktualisieren**
+(Update) on the pending-changes banner. METANET also sells a paid *Premium Service:
+Individuelle DNS-Einstellungen* where support enters the records for you — the emitted
+headers mention it as a fallback. Note that
 Cosmotown's customer panel has no SRV section, so the five SRV
 records can't be self-served — the `cosmotown` output routes you to Cosmotown support
 for those. See Cosmotown's docs for

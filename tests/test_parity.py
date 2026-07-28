@@ -35,7 +35,8 @@ def python_results() -> dict:
         ctx["value"] = v.value_of(ctx, CFG, "value")
         resolve.append({k: ctx[k] for k in (
             "qname", "fqdn", "subhost", "service", "protocol",
-            "srvhost", "srvsubhost", "match", "value")})
+            "srvhost", "srvsubhost", "bareservice", "bareprotocol",
+            "match", "value")})
     return {"match": match, "resolve": resolve}
 
 

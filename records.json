@@ -18,7 +18,7 @@
   "group_headers": {"MX": "MX:", "SRV": "SRV:", "TXT": "TXT:", "CNAME": "CNAME (DKIM):"},
   "value_templates": {
     "MX": {"match": "{priority} {target}", "value": "{target}", "match_mode": "exact"},
-    "SRV": {"match": "{priority} {weight} {port} {target}", "value": "{weight} {port} {target}", "match_mode": "exact"},
+    "SRV": {"match": "{priority} {weight} {port} {target}", "value": "{weight} {port} {target}", "match_mode": "exact_ignore_weight"},
     "TXT": {"match": "{match}", "value": "{value}", "match_mode": "contains"},
     "CNAME": {"match": "{target}", "value": "{target}", "match_mode": "exact"}
   },
@@ -219,6 +219,24 @@
       "CNAME": {
         "header": "UNVERIFIED — confirm the field labels against your panel. Porkbun → the DNS button under your domain → Manage DNS Records → + Add Record → Type CNAME. Enter the DKIM host label in Host; the Target does NOT need a trailing dot (Porkbun stores it verbatim):",
         "fields": [["Type", "CNAME"], ["Host", "{subhost}"], ["Target", "{target}"]]
+      }
+    },
+    "metanet-plesk": {
+      "MX": {
+        "header": "UNVERIFIED — confirm the field labels against your panel (the German MX labels come from Plesk's docs, not a live METANET form). Plesk → Websites & Domains → your domain → DNS-Einstellungen → 'Eintrag hinzufügen' → Eintragstyp MX. Leave Domainname EMPTY for the root domain (the panel prints '.yourdomain.' beside the box; do NOT type @), leave TTL empty for the 1440 s default, and enter the target WITHOUT a trailing dot (Plesk adds it). Priorität is a dropdown — pick the entry showing this number. Nothing goes live until you click 'Aktualisieren' (Update) on the yellow pending-changes banner. Prefer not to do this yourself? METANET's paid Premium Service «Individuelle DNS-Einstellungen» will enter the records for you — email support@metanet.ch:",
+        "fields": [["Eintragstyp (Type)", "MX"], ["Domainname (Host)", "{subhost}"], ["Priorität (Priority)", "{priority}"], ["Mail-Exchange-Server (Target)", "{target}"]]
+      },
+      "SRV": {
+        "header": "UNVERIFIED — the SRV field layout is confirmed from a live METANET form; confirm the rest against your panel. Plesk → DNS-Einstellungen → 'Eintrag hinzufügen' → Eintragstyp SRV. Plesk splits the label into Service-Name and Protokoll and wants them WITHOUT the leading underscore ('imaps', 'tcp' — the form's own hint is 'ohne Unterstrich'); leave Domainname EMPTY for the root domain (do NOT type @). Priorität and 'Relative Gewichtung' are dropdowns: pick 'sehr hoch (0)' for priority 0, and for the weight pick 'niedrig (0)' — the dropdown only offers 0/5/10…50, so Thundermail's weight of 1 is unenterable; this checker accepts any weight because with a single target the weight has no effect. Enter Zielhost WITHOUT a trailing dot (Plesk adds it), then click 'Aktualisieren' (Update) to commit. Prefer not to do this yourself? METANET's paid Premium Service «Individuelle DNS-Einstellungen» will enter the records for you — email support@metanet.ch:",
+        "fields": [["Eintragstyp (Type)", "SRV"], ["Service-Name (Service)", "{bareservice}"], ["Protokoll (Protocol)", "{bareprotocol}"], ["Domainname (Host)", "{srvsubhost}"], ["Priorität (Priority)", "{priority}"], ["Relative Gewichtung (Weight)", "niedrig (0)"], ["Zielhost (Target host)", "{target}"], ["Zielport (Target port)", "{port}"]]
+      },
+      "TXT": {
+        "header": "Plesk → Websites & Domains → your domain → DNS-Einstellungen → 'Eintrag hinzufügen' → Eintragstyp TXT. Leave Domainname EMPTY for the root domain (do NOT type @). Enter the value WITHOUT quotation marks — Plesk wraps TXT values in quotes itself. Nothing goes live until you click 'Aktualisieren' (Update) on the pending-changes banner. Prefer not to do this yourself? METANET's paid Premium Service «Individuelle DNS-Einstellungen» will enter the records for you — email support@metanet.ch:",
+        "fields": [["Eintragstyp (Type)", "TXT"], ["Domainname (Host)", "{subhost}"], ["TXT-Eintrag (TXT value)", "{value}"]]
+      },
+      "CNAME": {
+        "header": "UNVERIFIED — confirm the field labels against your panel (the German CNAME labels come from Plesk's docs, not a live METANET form). Plesk → DNS-Einstellungen → 'Eintrag hinzufügen' → Eintragstyp CNAME. Enter the DKIM label in Domainname (the panel appends your domain) and the target WITHOUT a trailing dot (Plesk adds it). Nothing goes live until you click 'Aktualisieren' (Update). Prefer not to do this yourself? METANET's paid Premium Service «Individuelle DNS-Einstellungen» will enter the records for you — email support@metanet.ch:",
+        "fields": [["Eintragstyp (Type)", "CNAME"], ["Domainname (Host)", "{subhost}"], ["Kanonischer Name (Target)", "{target}"]]
       }
     },
     "generic": {

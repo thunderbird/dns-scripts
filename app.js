@@ -11,6 +11,9 @@ const TOKEN = /\{(\w+)\}/g;
 // Hostname validation (kept in sync with the same regex in verify_thundermail_dns.py).
 const HOSTNAME = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$/;
 
+// How to word a mismatch, per match_mode (kept in sync with the CLI).
+const VERBS = { exact: "expected", exact_ignore_weight: "expected (any weight)" };
+
 const MAX_VALUE = 300; // cap displayed answer length to avoid DOM bloat
 const cap = (s) => (s.length <= MAX_VALUE ? s : s.slice(0, MAX_VALUE) + "…");
 
@@ -59,6 +62,11 @@ function resolveRecord(rec, domain) {
   // Like srvhost but blank (not "@") at the apex — for Hover's SRV form, whose
   // optional Subdomain field is left empty for the root domain.
   ctx.srvsubhost = labels.slice(2).join(".");
+  // Service/protocol WITHOUT the leading underscore — for Plesk-based panels
+  // (METANET), whose Service-Name/Protokoll fields are documented as taking the
+  // bare name ("Beispiel: SIP (ohne Unterstrich)"): "imaps"/"tcp", not "_imaps"/"_tcp".
+  ctx.bareservice = ctx.service.replace(/^_+/, "");
+  ctx.bareprotocol = ctx.protocol.replace(/^_+/, "");
   return ctx;
 }
 
@@ -70,16 +78,31 @@ function valueOf(ctx, cfg, key) {
   return interpolate(cfg.value_templates[ctx.type][key], ctx);
 }
 
-// True if `expected` matches any answer. mode "exact" (MX/SRV/CNAME) requires a
+// (priority, port, target) from an SRV record string — the fields that matter when
+// weight is ignored. null if the string isn't four space-separated fields, so a
+// malformed record can never match.
+function srvFields(record) {
+  const parts = record.trim().split(/\s+/);
+  return parts.length === 4 ? `${parts[0]} ${parts[2]} ${parts[3]}` : null;
+}
+
+// True if `expected` matches any answer. mode "exact" (MX/CNAME) requires a
 // whole-record equality so a target with extra labels appended (e.g. a missing
 // trailing dot turning "mail.thundermail.com" into "mail.thundermail.com.example.com")
 // fails; mode "contains" (TXT) keeps the substring test the prefix fragments
-// (MTA-STS/TLSRPT/DMARC) rely on. Case-insensitive; kept in sync with the CLI.
+// (MTA-STS/TLSRPT/DMARC) rely on; mode "exact_ignore_weight" (SRV) is "exact" on
+// priority/port/target but accepts any weight, because the weight only matters between
+// competing targets at the same priority — we publish a single target, and some panels
+// (Plesk/METANET) offer only a fixed dropdown of weights. Case-insensitive; kept in
+// sync with the CLI.
 function matches(expected, answers, mode) {
   const exp = expected.toLowerCase();
-  return mode === "exact"
-    ? answers.some((a) => a.toLowerCase() === exp)
-    : answers.some((a) => a.toLowerCase().includes(exp));
+  if (mode === "exact") return answers.some((a) => a.toLowerCase() === exp);
+  if (mode === "exact_ignore_weight") {
+    const want = srvFields(exp);
+    return want !== null && answers.some((a) => srvFields(a.toLowerCase()) === want);
+  }
+  return answers.some((a) => a.toLowerCase().includes(exp));
 }
 
 function renderFix(cfg, provider, ctx) {
@@ -239,7 +262,7 @@ async function runCheck(evt) {
 
       const mode = CFG.value_templates[rec.type].match_mode ?? "contains";
       const ok = matches(expected, answers, mode);
-      const verb = mode === "exact" ? "expected" : "expected to contain";
+      const verb = VERBS[mode] ?? "expected to contain";
       const row = el("div", "row");
       row.appendChild(el("span", `badge ${ok ? "ok" : "fail"}`, ok ? "OK" : "FAIL"));
       row.appendChild(el("span", "rlabel", labelOf(rec)));

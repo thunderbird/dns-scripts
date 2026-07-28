@@ -8,7 +8,15 @@
     {"name": "exact rejects empty answers", "expected": "10 mail.thundermail.com", "answers": [], "mode": "exact", "verdict": false},
     {"name": "contains accepts prefix fragment", "expected": "v=STSv1;", "answers": ["v=STSv1; id=18139500144460329770"], "mode": "contains", "verdict": true},
     {"name": "contains rejects absent fragment", "expected": "v=STSv1;", "answers": ["v=spf1 include:spf.thundermail.com -all"], "mode": "contains", "verdict": false},
-    {"name": "contains matches full SPF value", "expected": "v=spf1 include:spf.thundermail.com -all", "answers": ["v=spf1 include:spf.thundermail.com -all"], "mode": "contains", "verdict": true}
+    {"name": "contains matches full SPF value", "expected": "v=spf1 include:spf.thundermail.com -all", "answers": ["v=spf1 include:spf.thundermail.com -all"], "mode": "contains", "verdict": true},
+    {"name": "exact_ignore_weight accepts a different weight (Plesk dropdown, #14)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": true},
+    {"name": "exact_ignore_weight accepts the exact record", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": true},
+    {"name": "exact_ignore_weight still rejects appended target (#10)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com.digitalocean.example.com"], "mode": "exact_ignore_weight", "verdict": false},
+    {"name": "exact_ignore_weight rejects wrong priority", "expected": "0 1 443 mail.thundermail.com", "answers": ["10 1 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": false},
+    {"name": "exact_ignore_weight rejects wrong port", "expected": "0 1 993 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": false},
+    {"name": "exact_ignore_weight rejects malformed answer", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 443 mail.thundermail.com", ""], "mode": "exact_ignore_weight", "verdict": false},
+    {"name": "exact_ignore_weight rejects empty answers", "expected": "0 1 443 mail.thundermail.com", "answers": [], "mode": "exact_ignore_weight", "verdict": false},
+    {"name": "exact_ignore_weight is case-insensitive", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 5 443 MAIL.THUNDERMAIL.COM"], "mode": "exact_ignore_weight", "verdict": true}
   ],
   "resolveCases": [
     {"name": "MX apex", "domain": "example.com", "record": {"type": "MX", "host": "@", "priority": 10, "target": "mail.thundermail.com"}},

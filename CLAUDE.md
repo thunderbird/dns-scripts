@@ -43,9 +43,24 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   only referenced by the split-SRV templates (`godaddy`, `ionos`, `hover`). There's a
   sibling token **`{srvsubhost}`** = the same "rest" label but **blank at the apex
   instead of `@`** (mirroring how `{subhost}` relates to `{host}`); it exists only for
-  Hover, whose SRV form leaves the optional Subdomain field empty for the root. Like the
+  Hover, whose SRV form leaves the optional Subdomain field empty for the root. Two more
+  siblings, **`{bareservice}`/`{bareprotocol}`**, are `{service}`/`{protocol}` with the
+  leading underscore stripped (`jmap`/`tcp`) — they exist only for `metanet-plesk`, whose
+  Plesk SRV form documents its Service-Name/Protokoll fields as taking the bare name
+  ("Beispiel: SIP (ohne Unterstrich)"). Like the
   rest of the interpreter, the split is **duplicated in both Python and JS — keep it
   identical.**
+- **SRV weight is deliberately not compared.** `value_templates.SRV.match_mode` is
+  `exact_ignore_weight`, not `exact`: `matches()` compares priority/port/target exactly
+  (preserving the #10 fix) but accepts any weight, because weight only distributes load
+  between competing targets at the same priority and Thundermail publishes one target per
+  service — while Plesk/METANET's weight field is a dropdown in steps of 5, making the
+  canonical `weight: 1` unenterable. `records.json` still *publishes* weight 1 (it's what
+  the fix instructions print for every other provider); only the comparison is relaxed.
+  Whether the published value should become `0` is issue #14. The mode lives in
+  `matches()`/`srv_fields()` in Python and `matches()`/`srvFields()` in JS — **keep the
+  two identical**, and note both front-ends also word the mismatch from a `_VERBS`/`VERBS`
+  table keyed by match mode.
 - **Interpolation contract (both languages, must match):** substitute `{domain}`
   into every string field first; then `{field}` tokens in templates resolve against
   the concrete record. `re.sub`/`String.replace` use a **function** replacement so
@@ -149,6 +164,37 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   `bunny`. Value field is labelled contextually in the UI (`IPv4 Address`/`Target`/`Answer`);
   we emit `Answer` for MX/SRV/TXT and `Target` for CNAME. SPF/DKIM are plain TXT (DKIM is a
   CNAME here).
+  `metanet-plesk` (**partly UNVERIFIED** — the SRV field layout is confirmed from a screenshot
+  of the live *Ressourceneintrag bearbeiten* form on `thundermail.metanet.example.com`, and the TXT
+  form + auto-quoting from METANET's own docs; the German **MX/CNAME** labels
+  (`Mail-Exchange-Server`, `Kanonischer Name`) are stock-Plesk guesses, so those three headers
+  keep the `UNVERIFIED —` prefix while TXT ships without one). METANET's **Plesk** panel —
+  the first Plesk-based *and* first German-language provider; field labels are emitted in
+  **German with an English gloss** (`Zielhost (Target host)`) since that's what the user sees.
+  A single **Eintrag hinzufügen** form with an `Eintragstyp` dropdown (NS/A/AAAA/CNAME/MX/PTR/
+  TXT/SRV/DS/CAA), reached via *Websites & Domains → DNS-Einstellungen*. Apex `Domainname` is
+  left **blank** (`{subhost}`), never `@` — the bunny/cosmotown/ovh/porkbun pattern. Quirks:
+  the SRV form **splits Service-Name/Protokoll and wants them without the leading underscore**
+  (the reason `{bareservice}`/`{bareprotocol}` exist; its `Domainname` reuses `{srvsubhost}`);
+  **`Priorität` and `Relative Gewichtung` are dropdowns**, and the weight one only offers
+  0/5/10…50 so `weight: 1` can't be entered — the SRV block emits the literal `niedrig (0)`
+  and the checker ignores weight (see the `exact_ignore_weight` note above, issues #13/#14);
+  Weight/Port/Target are three separate fields (`Relative Gewichtung`/`Zielport`/`Zielhost`),
+  so SRV uses the individual tokens like namecheap/hover, not `{value}`; targets are stored
+  **verbatim with no trailing dot** (Plesk adds the root dot itself — confirmed live, unlike
+  ovh/digitalocean); **TXT values are auto-quoted by the panel** so they're emitted unquoted
+  (like cosmotown, field `TXT-Eintrag`); and **nothing goes live until `Aktualisieren`
+  (Update) is clicked** on the pending-changes banner, which all four headers state. The
+  headers also point at METANET's paid *Premium Service: Individuelle DNS-Einstellungen*
+  (`support@metanet.ch`) as an optional hand-off — unlike cosmotown, every type is
+  self-serviceable here. Key is `metanet-plesk` (not `plesk`) because only METANET's build was
+  confirmed; generalise if another Plesk host appears. Verify target
+  `thundermail.metanet.example.com` (a delegated *subdomain* zone on `ns1`/`ns2.hera.metanet.ch`, so
+  `--resolver ns1.hera.metanet.ch`); it sits at 12/13, with only a misconfigured
+  `_imaps._tcp` target outstanding. Docs:
+  [METANET: Plesk DNS-Verwaltung](https://www.metanet.ch/de/support/dns-nameserver/dns/plesk-dns-verwaltung)
+  (German; a Firefox-translated PDF and the SRV screenshot live in the ticket folder
+  `THUNDERBIRD_2023/TBPRO/7194_METANET_PLESK/`).
 - **Bookmarkable web URLs (web-only).** `app.js` mirrors the form state (domain /
   provider / resolver / fixformat) into the query string via `history.replaceState`,
   and on load repopulates the fields and auto-runs when a `domain` is present. This is
