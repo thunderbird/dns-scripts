@@ -13,6 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      # Node is preinstalled on ubuntu-latest, so the Python↔JS parity test runs here too.
+      # Node is preinstalled on ubuntu-latest, so the two tests that drive app.js
+      # through a Node harness (parity, copy text) run here too.
       - run: uv sync
       - run: uv run python -m unittest discover -s tests -t . -v

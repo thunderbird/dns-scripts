@@ -14,6 +14,10 @@ const HOSTNAME = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-
 // How to word a mismatch, per match_mode (kept in sync with the CLI).
 const VERBS = { exact: "expected", exact_ignore_weight: "expected (any weight)" };
 
+// The same relaxation, as a suffix for the "Expected" column of the copied
+// results table (web-only; the CLI has no clipboard).
+const MATCH_NOTES = { exact: "", exact_ignore_weight: " (any weight)" };
+
 const MAX_VALUE = 300; // cap displayed answer length to avoid DOM bloat
 const cap = (s) => (s.length <= MAX_VALUE ? s : s.slice(0, MAX_VALUE) + "…");
 
@@ -23,11 +27,13 @@ const TYPE_NUM = { A: 1, CNAME: 5, MX: 15, TXT: 16, SRV: 33 };
 
 const RESOLVERS = {
   cloudflare: {
+    label: "Cloudflare (1.1.1.1)",
     url: (name, type) =>
       `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`,
     headers: { accept: "application/dns-json" },
   },
   google: {
+    label: "Google (8.8.8.8)",
     url: (name, type) =>
       `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`,
     headers: {},
@@ -116,6 +122,17 @@ function renderFix(cfg, provider, ctx) {
   return lines;
 }
 
+// Failing records grouped by type, in record order — the shape both the compact
+// on-screen tables and the copied Markdown tables are built from.
+function groupByType(ctxs) {
+  const groups = new Map();
+  for (const ctx of ctxs) {
+    if (!groups.has(ctx.type)) groups.set(ctx.type, []);
+    groups.get(ctx.type).push(ctx);
+  }
+  return groups;
+}
+
 // Compact form: provider header, then a table with one column per field and one
 // row per failing record of the same type. Built from DOM nodes (textContent
 // only) so it stays within the CSP — no innerHTML.
@@ -190,7 +207,7 @@ function applyStateFromUrl() {
   if ($("domain").value) $("form").requestSubmit();
 }
 
-function updateUrl() {
+function stateParams() {
   const params = new URLSearchParams();
   const domain = $("domain").value.trim().replace(/\.$/, "");
   if (domain) params.set("domain", domain);
@@ -200,8 +217,139 @@ function updateUrl() {
     params.set("resolver", $("resolver").value);
   if ($("fixformat").value && $("fixformat").value !== "table")
     params.set("fixformat", $("fixformat").value);
-  const qs = params.toString();
+  return params;
+}
+
+function updateUrl() {
+  const qs = stateParams().toString();
   history.replaceState(null, "", qs ? `${location.pathname}?${qs}` : location.pathname);
+}
+
+// Absolute form of the same bookmarkable link, for pasting into an email or a
+// GitHub issue so the recipient can re-run the very same check.
+function shareUrl() {
+  const qs = stateParams().toString();
+  return new URL(qs ? `?${qs}` : ".", location.href).href;
+}
+
+// --- paste-ready copy (web-only) ----------------------------------------------
+// Results and fix instructions get pasted into support email and GitHub issues,
+// so each section offers a button that puts a Markdown version on the clipboard
+// (Markdown keeps the tables legible on GitHub and still reads fine as plain
+// text in mail). The text is built from the check's own data, never scraped out
+// of the DOM, and nothing here needs a CSP change: no inline script, no
+// innerHTML. The CLI has neither a clipboard nor a URL, so — like the
+// bookmarkable-URL feature — this is deliberately not mirrored in Python.
+
+// DNS answers are attacker-influenced and end up in someone's terminal or
+// editor after a paste, so strip control bytes (the web twin of the CLI's
+// sanitize()) and keep the same length cap as the on-screen values.
+const clean = (s) => cap(String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, "\uFFFD"));
+
+// A cell can't contain a raw "|" (it would split the Markdown table) or a line
+// break — which is flattened to a space before clean() gets to it, so a wrapped
+// value stays readable instead of turning into a replacement char. Blank cells
+// are spelled out, since an empty one in an email reads as an omission rather
+// than as "leave this field empty".
+const mdCell = (s) =>
+  clean(String(s).replace(/\s*[\r\n]+\s*/g, " ")).replace(/\|/g, "\\|") || "(leave blank)";
+const mdRow = (cells) => `| ${cells.join(" | ")} |`;
+
+// Provider blocks we haven't confirmed end-to-end open with an internal caveat
+// sentence ("UNVERIFIED — confirm the field labels against your panel."). That's
+// a note to us, not to the domain owner we're sending instructions to, so the
+// copied text drops that first sentence and keeps the panel navigation after it.
+function publicHeader(header) {
+  if (!header.startsWith("UNVERIFIED")) return header;
+  const cut = header.indexOf(". ");
+  return cut === -1 ? header.replace(/^UNVERIFIED\s*—\s*/, "") : header.slice(cut + 2);
+}
+
+function resultsMarkdown(domain, resolver, passed, rows, url) {
+  const out = [
+    `**Thundermail DNS check — ${domain}**`,
+    "",
+    `${passed} passed, ${rows.length - passed} failed · resolver: ${RESOLVERS[resolver].label}`,
+    "",
+    mdRow(["Status", "Record", "Expected", "Found"]),
+    mdRow(["---", "---", "---", "---"]),
+  ];
+  for (const r of rows) {
+    out.push(mdRow([r.ok ? "OK" : "**FAIL**", r.record, mdCell(r.expected), mdCell(r.found)]));
+  }
+  out.push("", `Re-check: ${url}`);
+  return out.join("\n");
+}
+
+function fixesMarkdown(cfg, provider, domain, failures, format, url) {
+  const out = [`**How to fix ${failures.length} record(s) in ${provider} — ${domain}**`, ""];
+  if (format === "long") {
+    for (const ctx of failures) {
+      const block = cfg.providers[provider][ctx.type];
+      out.push(`### ${ctx.type} ${ctx.label ?? ctx.host}`, "", publicHeader(block.header), "", "```");
+      const width = Math.max(...block.fields.map(([lbl]) => lbl.length)) + 1;
+      for (const [lbl, tpl] of block.fields) {
+        const v = clean(interpolate(tpl, ctx)) || "(leave blank)";
+        out.push(`${(lbl + ":").padEnd(width)} ${v}`);
+      }
+      out.push("```", "");
+    }
+  } else {
+    for (const [rtype, ctxs] of groupByType(failures)) {
+      const block = cfg.providers[provider][rtype];
+      out.push(publicHeader(block.header), "");
+      out.push(mdRow(block.fields.map(([lbl]) => lbl)));
+      out.push(mdRow(block.fields.map(() => "---")));
+      for (const ctx of ctxs) {
+        out.push(mdRow(block.fields.map(([, tpl]) => mdCell(interpolate(tpl, ctx)))));
+      }
+      out.push("");
+    }
+  }
+  out.push(`Re-check: ${url}`);
+  return out.join("\n");
+}
+
+async function writeClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through: the async Clipboard API also rejects when the document
+      // isn't focused, and it doesn't exist at all outside a secure context.
+    }
+  }
+  const ta = el("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  ta.remove();
+  return ok;
+}
+
+function copyButton(label, text) {
+  const btn = el("button", "copy", label);
+  btn.type = "button";
+  btn.addEventListener("click", async () => {
+    const ok = await writeClipboard(text);
+    btn.textContent = ok ? "Copied ✓" : "Copy failed";
+    btn.classList.toggle("done", ok);
+    setTimeout(() => {
+      btn.textContent = label;
+      btn.classList.remove("done");
+    }, 2000);
+  });
+  return btn;
 }
 
 function el(tag, cls, text) {
@@ -222,6 +370,7 @@ async function runCheck(evt) {
 
   if (!HOSTNAME.test(domain)) {
     $("results").replaceChildren();
+    $("resultsactions").replaceChildren();
     $("fixes").replaceChildren();
     $("summary").textContent = `“${domain}” is not a valid domain name.`;
     return;
@@ -230,10 +379,13 @@ async function runCheck(evt) {
   $("check").disabled = true;
   $("summary").textContent = `Checking ${domain}…`;
   $("results").replaceChildren();
+  $("resultsactions").replaceChildren();
   $("fixes").replaceChildren();
 
+  const url = shareUrl(); // captured now, so a later form edit can't skew the copy
   let passed = 0;
   const failures = [];
+  const rows = []; // one entry per record, for the copyable results table
   let currentGroup = null;
   let groupEl = null;
 
@@ -275,15 +427,27 @@ async function runCheck(evt) {
         failures.push(ctx);
       }
       groupEl.appendChild(row);
+      rows.push({
+        ok,
+        record: `${rec.type} ${labelOf(rec)}`,
+        expected: `${expected}${MATCH_NOTES[mode] ?? " (must contain)"}`,
+        found: cap(actual) || "(nothing)",
+      });
     }
 
     $("summary").textContent =
       `Result: ${passed} passed, ${failures.length} failed.`;
+    $("resultsactions").appendChild(copyButton(
+      "Copy results", resultsMarkdown(domain, resolver, passed, rows, url)));
 
     if (failures.length && provider) {
+      const format = $("fixformat").value;
       $("fixes").appendChild(
         el("h2", null, `How to fix ${failures.length} record(s) in ${provider}:`));
-      if ($("fixformat").value === "long") {
+      $("fixes").appendChild(el("div", "actions")).appendChild(copyButton(
+        "Copy fix instructions",
+        fixesMarkdown(CFG, provider, domain, failures, format, url)));
+      if (format === "long") {
         for (const ctx of failures) {
           const card = el("div", "fix");
           card.appendChild(el("h3", null, `${ctx.type} ${ctx.label ?? ctx.host}`));
@@ -291,12 +455,7 @@ async function runCheck(evt) {
           $("fixes").appendChild(card);
         }
       } else {
-        const groups = new Map(); // group failures by record type, in order
-        for (const ctx of failures) {
-          if (!groups.has(ctx.type)) groups.set(ctx.type, []);
-          groups.get(ctx.type).push(ctx);
-        }
-        for (const [rtype, ctxs] of groups) {
+        for (const [rtype, ctxs] of groupByType(failures)) {
           $("fixes").appendChild(fixTable(CFG, provider, rtype, ctxs));
         }
       }

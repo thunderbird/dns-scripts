@@ -46,6 +46,12 @@
     }
     button:disabled { opacity: .6; cursor: default; }
     #summary { font-weight: 600; margin: 1rem 0 .5rem; }
+    .actions:not(:empty) { display: flex; gap: .5rem; margin: 0 0 .75rem; }
+    button.copy {
+      background: none; color: var(--accent); border: 1px solid var(--border);
+      font-size: .8rem; padding: .3rem .7rem;
+    }
+    button.copy.done { color: var(--ok); }
     .group { margin-top: 1rem; }
     .group h2 { font-size: .95rem; margin: 0 0 .25rem; color: var(--muted); font-weight: 600; }
     .row { display: flex; gap: .6rem; padding: .15rem 0; align-items: baseline; }
@@ -112,6 +118,7 @@
     </form>
 
     <div id="summary" aria-live="polite"></div>
+    <div id="resultsactions" class="actions"></div>
     <div id="results"></div>
     <div id="fixes" class="fixes"></div>
 

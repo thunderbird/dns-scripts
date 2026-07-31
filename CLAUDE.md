@@ -197,12 +197,30 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   `THUNDERBIRD_2023/TBPRO/7194_METANET_PLESK/`).
 - **Bookmarkable web URLs (web-only).** `app.js` mirrors the form state (domain /
   provider / resolver / fixformat) into the query string via `history.replaceState`,
-  and on load repopulates the fields and auto-runs when a `domain` is present. This is
-  the **one intentionally web-only feature** — the CLI has no URL, so the
-  Python/JS-in-sync rule does not apply. Untrusted params are validated against the
-  known option sets before use and only ever assigned to `input.value`/`select.value`
-  (never `innerHTML`); the domain still passes the hostname regex before any lookup —
-  so it adds no XSS surface and needs **no CSP change**.
+  and on load repopulates the fields and auto-runs when a `domain` is present.
+  Untrusted params are validated against the known option sets before use and only
+  ever assigned to `input.value`/`select.value` (never `innerHTML`); the domain still
+  passes the hostname regex before any lookup — so it adds no XSS surface and needs
+  **no CSP change**.
+- **Copy-to-clipboard buttons (web-only).** Each of the two output sections has one:
+  *Copy results* (`#resultsactions`, after every completed check) and *Copy fix
+  instructions* (inside `#fixes`, only when a provider is picked and something
+  failed). Both put **Markdown** on the clipboard — tables survive a paste into a
+  GitHub issue and still read as plain text in email — and both append
+  `Re-check: <absolute bookmarkable URL>` from `shareUrl()`, the absolute twin of
+  `updateUrl()` (they share `stateParams()`). Two rules matter: the text is built
+  from the check's **data**, never scraped out of the DOM, and `publicHeader()`
+  strips the internal `UNVERIFIED — confirm the field labels…` *sentence* (not just
+  the token) from provider headers, since that's a note to us, not to the domain
+  owner receiving the instructions — the on-screen copy still shows it. DNS-derived
+  text goes through `clean()` (control bytes → `U+FFFD`, same `MAX_VALUE` cap as the
+  UI) because a paste can land in a terminal, and `mdCell()` escapes `|` and spells
+  empty fields as `(leave blank)`. `writeClipboard()` prefers
+  `navigator.clipboard.writeText` and falls back to a throwaway `<textarea>` +
+  `execCommand("copy")` for non-secure contexts (`file://`). No inline script and no
+  `innerHTML`, so **no CSP change**.
+- Those two features are the **intentionally web-only ones** — the CLI has no URL
+  and no clipboard, so the Python/JS-in-sync rule does not apply to them.
 
 ## Security posture
 
@@ -250,16 +268,18 @@ Exit status is `0` only when all 13 records are present and correct.
   which loads `app.js` in a `vm` sandbox) and asserts identical results — so when
   you change the interpreter in one language, update the other or this test fails.
   Add a fixture case whenever you add an interpreter token or `match_mode`.
-  ⚠️ **Harness fragility (by design):** `run_js.mjs` relies on `app.js`'s *only*
-  top-level side effect being the trailing `loadConfig().then(...)`, which it
-  neutralizes by stubbing `fetch` to stay pending (so the DOM-touching callback
-  never fires). If you add **new top-level (module-load-time) code to `app.js`**
-  that touches `document`/`window`/`location`/etc., the sandbox stubs in
-  `run_js.mjs` must be extended to match, or the parity test errors at load. This
-  is intentional pressure to keep `app.js`'s pure interpreter functions free of
+  `test_copy.py` covers the web-only clipboard text (see the copy-button bullet
+  below). ⚠️ **Harness fragility (by design):** both Node harnesses rely on
+  `app.js`'s *only* top-level side effect being the trailing
+  `loadConfig().then(...)`, which they neutralize by stubbing `fetch` to stay
+  pending (so the DOM-touching callback never fires). If you add **new top-level
+  (module-load-time) code to `app.js`** that touches `document`/`window`/`location`/
+  etc., the sandbox stubs in *both* `tests/parity/run_js.mjs` and
+  `tests/copy/run_js.mjs` must be extended to match, or those tests error at load.
+  This is intentional pressure to keep `app.js`'s pure functions free of
   load-time DOM coupling — but it means "just added a line to app.js" can surface
-  as a parity-harness failure rather than an obvious app bug; check `run_js.mjs`'s
-  stubs first in that case.
+  as a harness failure rather than an obvious app bug; check the stubs first in
+  that case.
 - **CLI regression:** normal-input output should stay byte-identical across
   refactors. Capture `glamrocnamecheap.com` (expect 13/13, exit 0) and
   `example.com --provider namecheap|squarespace|cosmotown|generic` before a change, then
@@ -275,6 +295,16 @@ Exit status is `0` only when all 13 records are present and correct.
   'self'`, no `unsafe-eval`) blocks Playwright's `page.wait_for_function`** — poll
   `page.inner_text('#summary')` in a loop instead. Confirm no console errors and no
   CSP violations (that verifies DoH + `records.json` requests aren't blocked).
+- **Copy buttons:** the text builders are covered by `test_copy.py` + its own Node
+  harness `tests/copy/run_js.mjs` (same sandbox trick as the parity one, but it also
+  needs `URL` and a real `location.href` for `shareUrl()`, and form fields with
+  values for `stateParams()`). One wrinkle: only `function` declarations land on the
+  vm's global — `const` arrows like `mdCell` don't, so the harness appends a
+  `globalThis.__copy = { mdCell }` epilogue to the *same* script rather than adding
+  test hooks to `app.js`. What it can't cover is the clipboard itself: click the
+  button in a browser (`button.copy` flips to `Copied ✓`). Don't try to read it back
+  with `navigator.clipboard.readText()` in a driven browser — it hangs on the
+  permission prompt; assert on the button state instead.
 
 ## Deployment
 
