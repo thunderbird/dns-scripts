@@ -238,6 +238,25 @@ preserve it when editing:
   invalid), and caps displayed answer length.
 - `--resolver` / `DNS_RESOLVER` are trusted (operator-controlled), out of scope.
 
+## Customer domains never enter the repo
+
+Provider work starts from a real customer domain (ticket, panel screenshot, live zone
+to check against), but **that domain goes nowhere persistent or public** — not
+`records.json`, the docs, the tests, an issue, a commit message, or a memory file.
+Repo, issue tracker and `RELEASE_NOTES.html`-on-Pages are all public. Use a
+provider-named placeholder (`ionos.example.com`, `porkbun.example.com`,
+`thundermail.metanet.example.com` — RFC 2606 reserves `example.*`, so it can't collide
+with a real domain), which also keeps per-provider verify targets distinguishable in
+the docs. **Traceability lives in the artifact:** cite the TBPRO ticket *number* (not
+the folder name — those often encode the domain, e.g.
+`6911_IONOS_DNS_<CUSTOMER>_DOT_COM`) or the screenshot in that folder, and don't commit
+the screenshots. Provider **nameserver** hostnames (`ns1.hera.metanet.ch`,
+`curitiba.ns.porkbun.com`) are fine — infrastructure, and what `--resolver` needs — as
+are domains we own (`glamrocnamecheap.com` is the CLI-example/regression domain). The
+contributor-facing version of this rule is in
+[`CONTRIBUTING.md`](CONTRIBUTING.md#never-write-a-customers-domain-into-the-repo).
+Scrubbed repo-wide (files, issues, and history) on 2026-07-30.
+
 ## Commands
 
 ```sh

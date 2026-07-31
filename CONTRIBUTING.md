@@ -33,6 +33,42 @@ If a panel needs something none of those cover, add the token to `resolve_record
 identical), then add a case to `tests/fixtures/parity_cases.json` and the tuple in
 `tests/test_parity.py` / `tests/parity/run_js.mjs` so the parity test covers it.
 
+### Never write a customer's domain into the repo
+
+Provider work starts from a real domain — a support ticket, a screenshot of that
+customer's panel, a live zone to check against. **That domain doesn't go into
+`records.json`, the docs, the tests, an issue, or a commit message.** Everything here
+is public: the repo, the issue tracker, and `RELEASE_NOTES.html` on GitHub Pages.
+
+Write a **placeholder** instead, named after the provider so the docs keep the
+distinction they'd lose if every example were `example.com`:
+
+| Instead of the real domain | Write |
+| -------------------------- | ----- |
+| the IONOS verify target    | `ionos.example.com` |
+| the Porkbun verify target  | `porkbun.example.com` |
+| a delegated subdomain zone | `thundermail.metanet.example.com` |
+
+`example.com`/`.net`/`.org` are reserved for exactly this ([RFC 2606](https://www.rfc-editor.org/rfc/rfc2606)),
+so a placeholder can never collide with someone's real domain.
+
+**Traceability comes from the artifact, not the domain.** Cite the **ticket number**
+(e.g. "TBPRO ticket 7194") or the internal artifact path, and let that be the pointer
+to which domain was used. Two things to watch:
+
+- Cite the ticket *number*, not a folder name verbatim — internal ticket folders often
+  encode the domain (`6911_IONOS_DNS_<CUSTOMER>_DOT_COM`), which puts it right back
+  in the repo.
+- **Don't commit the screenshots.** Keep them in the ticket folder and cite them
+  ("SRV form screenshot, ticket 7194"). Redact account/billing/personal chrome as
+  above; a record list showing the customer's own zone is fine *in the ticket*, not
+  in the repo.
+
+What *is* fine to name: the provider's **nameserver hostnames**
+(`ns1.hera.metanet.ch`, `curitiba.ns.porkbun.com`, `kiki.bunny.net`) — they're
+infrastructure, they identify nobody, and they're what `--resolver` needs; and
+domains we own ourselves, used as CLI examples.
+
 ### Verify field conventions against the *actual panel* — not an automated fetch
 
 This is the important one, and it's why this file exists.
@@ -73,7 +109,8 @@ not guessed and not scraped by an automated tool.** Two reasons:
 5. **The provider name and docs URL**, for the citation and the header wording.
 
 A screenshot from a real customer's panel is perfect — just **redact** any
-account / billing / personal chrome first (the DNS records themselves are fine).
+account / billing / personal chrome first (the DNS records themselves are fine), and
+keep the screenshot in the ticket rather than committing it (see above).
 Reading the docs in a real browser is the fallback when a screenshot isn't
 available; automated fetches are the last resort and usually the least reliable.
 
