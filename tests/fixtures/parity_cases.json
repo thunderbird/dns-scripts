@@ -1,7 +1,7 @@
 {
   "_comment": "Shared fixtures exercised by BOTH the Python suite (tests/test_parity.py) and the Node harness (tests/parity/run_js.mjs). JSON has no comment syntax, so this key documents intent. matchCases feed matches(); resolveCases feed resolve_record/resolveRecord + value_of/valueOf.",
   "matchCases": [
-    {"name": "exact rejects appended target (#10)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com.digitalocean.example.com"], "mode": "exact", "verdict": false},
+    {"name": "exact rejects appended target (#10)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com.example.com"], "mode": "exact", "verdict": false},
     {"name": "exact accepts correct target", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com"], "mode": "exact", "verdict": true},
     {"name": "exact accepts among multiple answers", "expected": "10 mail.thundermail.com", "answers": ["20 backup.example.com", "10 mail.thundermail.com"], "mode": "exact", "verdict": true},
     {"name": "exact is case-insensitive", "expected": "tm1.example.com.dkim.thunderhosted.com", "answers": ["TM1.EXAMPLE.COM.DKIM.THUNDERHOSTED.COM"], "mode": "exact", "verdict": true},
@@ -11,7 +11,7 @@
     {"name": "contains matches full SPF value", "expected": "v=spf1 include:spf.thundermail.com -all", "answers": ["v=spf1 include:spf.thundermail.com -all"], "mode": "contains", "verdict": true},
     {"name": "exact_ignore_weight accepts a different weight (Plesk dropdown, #14)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": true},
     {"name": "exact_ignore_weight accepts the exact record", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": true},
-    {"name": "exact_ignore_weight still rejects appended target (#10)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com.digitalocean.example.com"], "mode": "exact_ignore_weight", "verdict": false},
+    {"name": "exact_ignore_weight still rejects appended target (#10)", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com.example.com"], "mode": "exact_ignore_weight", "verdict": false},
     {"name": "exact_ignore_weight rejects wrong priority", "expected": "0 1 443 mail.thundermail.com", "answers": ["10 1 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": false},
     {"name": "exact_ignore_weight rejects wrong port", "expected": "0 1 993 mail.thundermail.com", "answers": ["0 1 443 mail.thundermail.com"], "mode": "exact_ignore_weight", "verdict": false},
     {"name": "exact_ignore_weight rejects malformed answer", "expected": "0 1 443 mail.thundermail.com", "answers": ["0 443 mail.thundermail.com", ""], "mode": "exact_ignore_weight", "verdict": false},

@@ -36,7 +36,7 @@ class TestMatches(unittest.TestCase):
         # #10 regression: a target with the zone name appended must not pass.
         self.assertFalse(v.matches(
             "0 1 443 mail.thundermail.com",
-            ["0 1 443 mail.thundermail.com.digitalocean.example.com"],
+            ["0 1 443 mail.thundermail.com.example.com"],
             "exact",
         ))
 
@@ -85,7 +85,7 @@ class TestMatches(unittest.TestCase):
         # The #10 protection must survive: only the weight is exempt.
         self.assertFalse(v.matches(
             "0 1 443 mail.thundermail.com",
-            ["0 0 443 mail.thundermail.com.digitalocean.example.com"],
+            ["0 0 443 mail.thundermail.com.example.com"],
             "exact_ignore_weight",
         ))
 
