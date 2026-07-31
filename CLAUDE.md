@@ -219,7 +219,28 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   `navigator.clipboard.writeText` and falls back to a throwaway `<textarea>` +
   `execCommand("copy")` for non-secure contexts (`file://`). No inline script and no
   `innerHTML`, so **no CSP change**.
-- Those two features are the **intentionally web-only ones** — the CLI has no URL
+- **Per-cell `⧉` copy in the fix table (web-only, issue #17).** Every cell of the
+  compact How-to-fix table carries a small `⧉` button that copies **just that one
+  panel value** — the field-by-field job the user is actually doing with their
+  provider's panel open in the next tab, as opposed to *Copy fix instructions*, which
+  copies the whole block as Markdown for an email or issue. Built in `fixCell()`
+  (called by `fixTable()`); `copyButton()` takes an options object so the cells can
+  pass the compact glyph pair (`⧉` → `✓`, `✗` on failure — "Copied ✓" doesn't fit in a
+  column) plus an `aria-label`/`title` (`Copy Host: _jmap._tcp`), since a bare glyph is
+  not a label. The buttons are always visible (dim until hover/focus) rather than
+  hover-revealed, so they work on touch. Two wrinkles: **(a)** a field template may
+  append a **reader hint after a run of two-plus spaces** (`namecheap` CNAME `Value` =
+  `{value}   (no trailing dot)`) — that's guidance, not something to paste into a
+  panel, so `copyValue()` cuts the string at the first 2+-space run and the cell
+  renders the remainder as a muted `.cellhint` span. Keep that spacing convention if
+  you add a hint to a template (single-spaced values like SRV `0 1 443 host` are
+  untouched, and `tests/test_copy.py` sweeps every provider field to prove no copy
+  carries a hint). **(b)** A **blank** value (apex host on
+  bunny/cosmotown/ovh/porkbun/metanet-plesk) shows an italic `(leave blank)` and gets
+  **no** button — nothing to paste, and a copy of `""` can only ever look like it
+  failed. Values come from `interpolate(tpl, ctx)`, never scraped from the DOM;
+  `textContent` only, so again **no CSP change**.
+- Those three features are the **intentionally web-only ones** — the CLI has no URL
   and no clipboard, so the Python/JS-in-sync rule does not apply to them.
 
 ## Security posture
@@ -319,9 +340,13 @@ Exit status is `0` only when all 13 records are present and correct.
   needs `URL` and a real `location.href` for `shareUrl()`, and form fields with
   values for `stateParams()`). One wrinkle: only `function` declarations land on the
   vm's global — `const` arrows like `mdCell` don't, so the harness appends a
-  `globalThis.__copy = { mdCell }` epilogue to the *same* script rather than adding
-  test hooks to `app.js`. What it can't cover is the clipboard itself: click the
-  button in a browser (`button.copy` flips to `Copied ✓`). Don't try to read it back
+  `globalThis.__copy = { mdCell, copyValue }` epilogue to the *same* script rather than
+  adding test hooks to `app.js`. The per-cell buttons (#17) are covered the same way —
+  through the pure `copyValue()`, plus a sweep of every provider field asserting no
+  copied value carries a reader hint; the DOM assembly in `fixCell()` is not covered
+  (the harness's `createElement` returns one shared stub), so check the table in a
+  browser. What it can't cover is the clipboard itself: click the
+  button in a browser (`button.copy` flips to `Copied ✓`, a cell's `⧉` to `✓`). Don't try to read it back
   with `navigator.clipboard.readText()` in a driven browser — it hangs on the
   permission prompt; assert on the button state instead.
 

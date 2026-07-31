@@ -147,12 +147,40 @@ function fixTable(cfg, provider, rtype, ctxs) {
   const tbody = el("tbody");
   for (const ctx of ctxs) {
     const tr = el("tr");
-    for (const [, tpl] of block.fields) tr.appendChild(el("td", null, interpolate(tpl, ctx)));
+    for (const [lbl, tpl] of block.fields) tr.appendChild(fixCell(lbl, interpolate(tpl, ctx)));
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   wrap.appendChild(table);
   return wrap;
+}
+
+// What actually belongs in the panel's field. A field template may append an
+// inline hint after a run of spaces (namecheap's CNAME `Value` carries
+// "(no trailing dot)"), which is guidance for the reader — useful on screen and in
+// the CLI, but it must never ride along into the panel on a paste. So: the
+// clipboard gets everything up to the first run of two-plus spaces. Every real
+// value (SRV "0 1 443 host", SPF, …) is single-spaced, so nothing else is touched.
+const copyValue = (s) => s.split(/\s{2,}/)[0];
+
+// One table cell: the value, plus a "⧉" button that copies just that value
+// (issue #17). Entering these records is a field-by-field job with the provider's
+// panel open in the next tab, which is what the section-level "Copy fix
+// instructions" (whole block, as Markdown, for email/issues) doesn't serve.
+// A blank value — the apex host on bunny/cosmotown/ovh/porkbun/metanet-plesk —
+// says "(leave blank)" so an empty cell reads as deliberate rather than as a bug,
+// and gets no button: there is nothing to paste, and offering a copy of "" would
+// only ever look like it failed.
+function fixCell(label, value) {
+  const td = el("td");
+  const copy = copyValue(value);
+  td.appendChild(el("span", copy ? "cellval" : "cellval blank", copy || "(leave blank)"));
+  if (value !== copy) td.appendChild(el("span", "cellhint", value.slice(copy.length).trim()));
+  if (copy) {
+    td.appendChild(copyButton("⧉", copy,
+      { cls: "cell", ok: "✓", fail: "✗", aria: `Copy ${label}: ${copy}` }));
+  }
+  return td;
 }
 
 // --- DNS query (the one genuinely platform-specific piece: DoH here) ----------
@@ -337,12 +365,21 @@ async function writeClipboard(text) {
   return ok;
 }
 
-function copyButton(label, text) {
-  const btn = el("button", "copy", label);
+// `label` is the resting text; a click swaps in the feedback wording for 2s. The
+// section buttons use the default "Copied ✓"/"Copy failed"; per-cell buttons pass
+// the compact glyph pair (opts.ok/opts.fail) since that text doesn't fit in a
+// table column, plus an extra class for styling and an aria-label — "⧉" on its own
+// is not a label.
+function copyButton(label, text, opts = {}) {
+  const btn = el("button", opts.cls ? `copy ${opts.cls}` : "copy", label);
   btn.type = "button";
+  if (opts.aria) {
+    btn.setAttribute("aria-label", opts.aria);
+    btn.title = opts.aria;
+  }
   btn.addEventListener("click", async () => {
     const ok = await writeClipboard(text);
-    btn.textContent = ok ? "Copied ✓" : "Copy failed";
+    btn.textContent = ok ? (opts.ok ?? "Copied ✓") : (opts.fail ?? "Copy failed");
     btn.classList.toggle("done", ok);
     setTimeout(() => {
       btn.textContent = label;

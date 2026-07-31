@@ -50,11 +50,12 @@ vm.createContext(sandbox);
 // `function` declarations land on the sandbox global, but `const` ones (mdCell
 // and friends) only exist in the script's lexical scope — so an epilogue run as
 // part of the same script hands them out. Keeps app.js free of test scaffolding.
-vm.runInContext(`${appSrc}\nglobalThis.__copy = { mdCell };`, sandbox,
+vm.runInContext(`${appSrc}\nglobalThis.__copy = { mdCell, copyValue };`, sandbox,
                 { filename: "app.js" });
 
-const { resolveRecord, publicHeader, resultsMarkdown, fixesMarkdown, shareUrl } = sandbox;
-const { mdCell } = sandbox.__copy;
+const { resolveRecord, interpolate, publicHeader, resultsMarkdown, fixesMarkdown,
+        shareUrl } = sandbox;
+const { mdCell, copyValue } = sandbox.__copy;
 const valueOf = sandbox.valueOf; // own global prop shadows Object.prototype.valueOf
 
 // A failing record, as runCheck() would have built it before handing it to the
@@ -68,11 +69,24 @@ function ctxFor(host, type, domain) {
   return ctx;
 }
 
+// The first record of a type, for sweeps that care about the provider's fields
+// rather than about a particular record.
+function ctxForType(type, domain) {
+  const rec = cfg.records.find((r) => r.type === type);
+  return ctxFor(rec.host, type, domain);
+}
+
 const out = {
   shareUrl: shareUrl(),
   publicHeaders: spec.publicHeaderCases.map(publicHeader),
   providerHeaders: spec.providerHeaderCases.map(([p, t]) => publicHeader(cfg.providers[p][t].header)),
   cells: spec.cellCases.map(mdCell),
+  copyValues: spec.copyValueCases.map(copyValue),
+  // What the per-cell "⧉" buttons would put on the clipboard, for every field of
+  // every provider/type — the shape the table renderer feeds them.
+  fieldCopies: spec.fieldCopyCases.map(([p, t, domain]) =>
+    cfg.providers[p][t].fields.map(([lbl, tpl]) =>
+      [lbl, copyValue(interpolate(tpl, ctxForType(t, domain)))])),
   results: resultsMarkdown(
     spec.resultsCase.domain, spec.resultsCase.resolver, spec.resultsCase.passed,
     spec.resultsCase.rows, spec.resultsCase.url),

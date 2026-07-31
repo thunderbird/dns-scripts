@@ -2,10 +2,11 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
-"""The web app's paste-ready copy text (issues #15/#16).
+"""The web app's paste-ready copy text (issues #15/#16/#17).
 
 "Copy results" and "Copy fix instructions" put Markdown on the clipboard for
-pasting into support email and GitHub issues. That text is web-only — the CLI
+pasting into support email and GitHub issues, and each How-to-fix table cell has a
+"⧉" that copies just that one panel value. That text is web-only — the CLI
 has neither a clipboard nor a URL — so it has no Python twin to compare against
 the way tests/test_parity.py does; instead a Node harness
 (tests/copy/run_js.mjs) runs the builders in app.js and the expectations live
@@ -14,7 +15,11 @@ here. Skips gracefully if `node` is missing.
 The rules worth pinning: the internal "UNVERIFIED — confirm the field labels…"
 sentence never reaches the clipboard, Markdown tables can't be broken by a cell
 value, blank fields say so, DNS-derived text can't smuggle control bytes into
-whatever the recipient pastes into, and every copy ends with a re-check link.
+whatever the recipient pastes into, a per-cell copy is exactly the panel value
+(never a reader hint appended to it), and every copy ends with a re-check link.
+
+What no test here can cover is the clipboard itself: click the buttons in a real
+browser (the section ones flip to "Copied ✓", a cell's "⧉" to "✓").
 """
 
 import json
@@ -55,6 +60,22 @@ MD_CELL_CASES = [
     ("z" * 400, "z" * 300 + "…"),        # same length cap as the on-screen values
 ]
 
+# copyValue() — what a per-cell "⧉" button puts on the clipboard (issue #17).
+# A field template may append an inline hint after a run of spaces; that's for the
+# reader, and must not ride along into the provider's panel on a paste.
+COPY_VALUE_CASES = [
+    ("mail.thundermail.com", "mail.thundermail.com"),
+    # namecheap's CNAME Value template: value, then a spaced-out hint.
+    ("tm1.example.com.dkim.thunderhosted.com   (no trailing dot)",
+     "tm1.example.com.dkim.thunderhosted.com"),
+    # Single-spaced values are never split — SRV packs four fields into one.
+    ("0 1 443 mail.thundermail.com", "0 1 443 mail.thundermail.com"),
+    ("v=spf1 include:spf.thundermail.com -all", "v=spf1 include:spf.thundermail.com -all"),
+    # A parenthetical that IS the value (METANET's weight dropdown) survives.
+    ("niedrig (0)", "niedrig (0)"),
+    ("", ""),                            # e.g. the Host field at the apex
+]
+
 RESULTS_ROWS = [
     {"ok": False, "record": "MX @", "expected": "10 mail.thundermail.com",
      "found": "(nothing)"},
@@ -86,6 +107,9 @@ def run_harness() -> dict:
         "providerHeaderCases": [[p, t] for p, block in CFG["providers"].items()
                                 for t in block],
         "cellCases": [src for src, _ in MD_CELL_CASES],
+        "copyValueCases": [src for src, _ in COPY_VALUE_CASES],
+        "fieldCopyCases": [[p, t, "example.com"] for p, block in CFG["providers"].items()
+                           for t in block],
         "resultsCase": {"domain": "example.com", "resolver": "cloudflare",
                         "passed": 2, "rows": RESULTS_ROWS, "url": LINK},
         "fixCases": FIX_CASES,
@@ -140,6 +164,25 @@ class TestCopyText(unittest.TestCase):
     def test_md_cell_rules(self):
         for (src, want), got in zip(MD_CELL_CASES, self.out["cells"]):
             self.assertEqual(got, want, repr(src))
+
+    # --- per-cell copy (#17) -------------------------------------------------
+
+    def test_copy_value_rules(self):
+        for (src, want), got in zip(COPY_VALUE_CASES, self.out["copyValues"]):
+            self.assertEqual(got, want, repr(src))
+
+    def test_no_field_copies_a_reader_hint_into_the_panel(self):
+        # Sweep every provider/type: whatever a "⧉" button hands over is a single
+        # panel value, so it can't carry the spaced-out hint (or any run of spaces
+        # a hint would hide behind) or wrap onto a second line.
+        pairs = [(p, t) for p, block in CFG["providers"].items() for t in block]
+        for (provider, rtype), fields in zip(pairs, self.out["fieldCopies"]):
+            for label, copied in fields:
+                with self.subTest(provider=provider, type=rtype, field=label):
+                    self.assertNotIn("  ", copied)
+                    self.assertNotIn("\n", copied)
+                    self.assertEqual(copied, copied.strip())
+                    self.assertNotIn("{", copied)  # no unresolved token
 
     # --- results copy (#16) --------------------------------------------------
 
