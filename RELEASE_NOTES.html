@@ -70,7 +70,7 @@
         <tr><th>Provider</th><th>Added</th><th>Verification</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>namecheap</code></td><td>2026-07-02</td><td>Field conventions verified against Namecheap's docs.</td></tr>
+        <tr><td><code>namecheap</code></td><td>2026-07-02</td><td>Field conventions verified against Namecheap's docs. <strong>SRV row re-verified 2026-08-11</strong> against a live panel screenshot — the form changed (see notes).</td></tr>
         <tr><td><code>squarespace</code></td><td>2026-07-02</td><td>Field conventions verified against Squarespace's docs.</td></tr>
         <tr><td><code>generic</code></td><td>2026-07-02</td><td>Provider-agnostic FQDN/value fallback — nothing panel-specific to verify.</td></tr>
         <tr><td><code>cosmotown</code></td><td>2026-07-07</td><td>Verified against a live panel (cosmotown.example.com); quirks confirmed from a record-list screenshot.</td></tr>
@@ -505,6 +505,24 @@
       the emitted fix strings against the live panel, then drop the <code>UNVERIFIED</code> prefixes in
       <code>records.json</code> and the notes here and in
       <a href="https://github.com/thunderbird/dns-scripts/blob/main/README.md"><code>README.md</code></a>.</p>
+
+      <h3 id="namecheap-srv-form-changed"><code>namecheap</code> — SRV form changed (2026-08-11)</h3>
+      <p>Namecheap reworked the <strong>Advanced DNS → Add New Record → SRV Record</strong> row. It no longer
+      has a <code>Host</code> field: the label is split into <strong><code>Service</code></strong>
+      (<code>_jmap</code>) + <strong><code>Protocol</code></strong> (<code>_tcp</code>), followed by
+      <code>Priority</code> / <code>Weight</code> / <code>Port</code> / <code>Target</code> and the TTL
+      dropdown — the same shape as GoDaddy/IONOS/Hover. Two sources agree: a live panel screenshot taken
+      2026-08-11 (TBPRO ticket 6978) and Namecheap's
+      <a href="https://www.namecheap.com/support/knowledgebase/article.aspx/9765/2237/how-to-create-a-srv-record-for-a-domain/">SRV
+      KB article</a>, which lists exactly those fields and says a <em>subdomain</em> is appended to the
+      Protocol value (<code>_tcp.mc</code>) instead of being typed into a host box.</p>
+      <p>Fix (issue <a href="https://github.com/thunderbird/dns-scripts/issues/18">#18</a>): the
+      <code>namecheap</code> SRV block now emits <code>Service: {service}</code> +
+      <code>Protocol: {protocol}</code> in place of <code>Host: {host}</code>, and the header says there's no
+      Host field. Pure data — the split tokens already existed for GoDaddy, so no interpreter change in
+      either front-end. All 13 Thundermail records live at the apex, so plain <code>{protocol}</code>
+      (<code>_tcp</code>) is correct; the subdomain-suffix case never arises. Namecheap's MX / TXT / CNAME
+      rows are unchanged.</p>
     </details>
   </main>
 </body>

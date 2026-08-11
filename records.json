@@ -29,8 +29,8 @@
         "fields": [["Type", "MX Record"], ["Host", "{host}"], ["Value", "{target}"], ["Priority", "{priority}"]]
       },
       "SRV": {
-        "header": "Namecheap → Advanced DNS → Add New Record → SRV Record:",
-        "fields": [["Host", "{host}"], ["Priority", "{priority}"], ["Weight", "{weight}"], ["Port", "{port}"], ["Target", "{target}"]]
+        "header": "Namecheap → Advanced DNS → Add New Record → SRV Record (no Host field — the label splits into Service + Protocol):",
+        "fields": [["Service", "{service}"], ["Protocol", "{protocol}"], ["Priority", "{priority}"], ["Weight", "{weight}"], ["Port", "{port}"], ["Target", "{target}"]]
       },
       "TXT": {
         "header": "Namecheap → Advanced DNS → Add New Record → TXT Record:",

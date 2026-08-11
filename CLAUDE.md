@@ -37,10 +37,11 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
 - **SRV-label split tokens (`{service}`/`{protocol}`/`{srvhost}`).** The interpreter
   also splits the SRV host label on `.`: `{service}` = first label (`_jmap`),
   `{protocol}` = second (`_tcp`), `{srvhost}` = the rest or `@` (always `@` for our
-  records, which live at the apex). These exist **only for GoDaddy**, whose add-record
-  form breaks SRV into separate Service/Protocol/Name fields — every other provider
-  keeps the whole `_jmap._tcp` in one Host field. They're computed for all records but
-  only referenced by the split-SRV templates (`godaddy`, `ionos`, `hover`). There's a
+  records, which live at the apex). They were added for GoDaddy, whose add-record
+  form breaks SRV into separate Service/Protocol/Name fields; other panels keep the
+  whole `_jmap._tcp` in one Host field. They're computed for all records but
+  only referenced by the split-SRV templates (`godaddy`, `ionos`, `hover`,
+  `namecheap`). There's a
   sibling token **`{srvsubhost}`** = the same "rest" label but **blank at the apex
   instead of `@`** (mirroring how `{subhost}` relates to `{host}`); it exists only for
   Hover, whose SRV form leaves the optional Subdomain field empty for the root. Two more
@@ -79,9 +80,17 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   `--resolver kiki.bunny.net` queries it authoritatively (verified against the live
   `bunny.example.com` zone — 13/13).
 - **Provider field conventions were verified against each provider's docs, not
-  guessed** (e.g. Namecheap splits SRV into Host/Priority/Weight/Port/Target;
-  Squarespace uses Name + a separate Priority + `Data` = "weight port target").
-  Provider menu wording may drift — re-verify if a user reports it's off.
+  guessed** (e.g. Squarespace uses Name + a separate Priority + `Data` = "weight port
+  target"). Provider menu wording may drift — re-verify if a user reports it's off.
+  `namecheap`'s SRV row is a case in point: it used to be
+  Host/Priority/Weight/Port/Target, and as of a live panel screenshot on 2026-08-11
+  (TBPRO ticket 6978) it has **no Host field at all** — the label is split into
+  `Service` (`_jmap`) + `Protocol` (`_tcp`), the GoDaddy/IONOS/Hover shape, followed by
+  Priority/Weight/Port/Target and a TTL dropdown (issue #18). Namecheap's
+  [SRV article](https://www.namecheap.com/support/knowledgebase/article.aspx/9765/2237/how-to-create-a-srv-record-for-a-domain/)
+  matches, and notes a *subdomain* is appended to the Protocol field (`_tcp.mc`)
+  rather than typed into a host box — irrelevant for us, since all 13 records are at
+  the apex, so plain `{protocol}` is right. MX/TXT/CNAME rows are unchanged.
   `cosmotown` was verified against a live panel (cosmotown.example.com). Its quirks:
   records are grouped into per-type sections each with its own `+ Quick Add`
   (so there's no Type field); columns are `Priority`/`Host`/`Points to` (MX),
