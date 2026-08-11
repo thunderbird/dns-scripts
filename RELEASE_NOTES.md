@@ -10,7 +10,7 @@ and the verification bar every provider is held to.
 
 | Provider      | Added      | Verification                                                                 |
 | ------------- | ---------- | ---------------------------------------------------------------------------- |
-| `namecheap`   | 2026-07-02 | Field conventions verified against Namecheap's docs. **SRV row re-verified 2026-08-11** against a live panel screenshot — the form changed (see notes). |
+| `namecheap`   | 2026-07-02 | **Re-verified 2026-08-11** against live panel screenshots of all four rows; SRV and the MX/CNAME labels had changed (see notes). |
 | `squarespace` | 2026-07-02 | Field conventions verified against Squarespace's docs.                       |
 | `generic`     | 2026-07-02 | Provider-agnostic FQDN/value fallback — nothing panel-specific to verify.    |
 | `cosmotown`   | 2026-07-07 | Verified against a live panel (cosmotown.example.com); quirks confirmed from a record-list screenshot. |
@@ -466,7 +466,7 @@ outstanding), so fix that record using the emitted `metanet-plesk` SRV instructi
 eyeball the emitted fix strings against the live panel, then drop the `UNVERIFIED` prefixes in
 `records.json` and the notes here and in [`README.md`](README.md).
 
-### `namecheap` — SRV form changed (2026-08-11)
+### `namecheap` — panel re-verified, SRV/MX/CNAME changed (2026-08-11)
 
 Namecheap reworked the **Advanced DNS → Add New Record → SRV Record** row. It no longer
 has a `Host` field: the label is split into **`Service`** (`_jmap`) + **`Protocol`**
@@ -482,6 +482,27 @@ SRV block now emits `Service: {service}` + `Protocol: {protocol}` in place of
 `Host: {host}`, and the header says there's no Host field. Pure data — the split tokens
 already existed for GoDaddy, so no interpreter change in either front-end. All 13
 Thundermail records live at the apex, so plain `{protocol}` (`_tcp`) is correct; the
-subdomain-suffix case never arises. Namecheap's MX / TXT / CNAME rows are unchanged.
+subdomain-suffix case never arises.
+
+Screenshots of the other three rows, from the same ticket, followed
+(issue [#19](https://github.com/thunderbird/dns-scripts/issues/19)):
+
+```
+MX Record        Host   Mail Server   Priority   [Automatic ▾]
+[TXT Record ▾]   Host   Value                    [Automatic ▾]
+[CNAME Record ▾] Host   Target                   [Automatic ▾]
+```
+
+- **TXT** is `Host` + `Value` — exactly what we emit, no change.
+- **MX** labels the target field **`Mail Server`**, not `Value`; and because it lives in
+  *Mail Settings → Custom MX*, the type is fixed text rather than a dropdown, so there's
+  **no Type field to fill in**. The `Type: MX Record` row we used to emit was unfillable
+  (and, with the per-cell copy buttons, offered a copy into a field that doesn't exist),
+  so it's gone — the MX block now matches TXT/CNAME, which never carried one.
+- **CNAME** labels its value field **`Target`**, not `Value`. The `(no trailing dot)`
+  reader hint stays.
+
+Again pure data, no interpreter change. Verified end-to-end: full suite green,
+`glamrocnamecheap.com` still 13/13 exit 0.
 
 </details>

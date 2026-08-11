@@ -70,7 +70,7 @@
         <tr><th>Provider</th><th>Added</th><th>Verification</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>namecheap</code></td><td>2026-07-02</td><td>Field conventions verified against Namecheap's docs. <strong>SRV row re-verified 2026-08-11</strong> against a live panel screenshot — the form changed (see notes).</td></tr>
+        <tr><td><code>namecheap</code></td><td>2026-07-02</td><td><strong>Re-verified 2026-08-11</strong> against live panel screenshots of all four rows; SRV and the MX/CNAME labels had changed (see notes).</td></tr>
         <tr><td><code>squarespace</code></td><td>2026-07-02</td><td>Field conventions verified against Squarespace's docs.</td></tr>
         <tr><td><code>generic</code></td><td>2026-07-02</td><td>Provider-agnostic FQDN/value fallback — nothing panel-specific to verify.</td></tr>
         <tr><td><code>cosmotown</code></td><td>2026-07-07</td><td>Verified against a live panel (cosmotown.example.com); quirks confirmed from a record-list screenshot.</td></tr>
@@ -506,7 +506,7 @@
       <code>records.json</code> and the notes here and in
       <a href="https://github.com/thunderbird/dns-scripts/blob/main/README.md"><code>README.md</code></a>.</p>
 
-      <h3 id="namecheap-srv-form-changed"><code>namecheap</code> — SRV form changed (2026-08-11)</h3>
+      <h3 id="namecheap-srv-form-changed"><code>namecheap</code> — panel re-verified, SRV/MX/CNAME changed (2026-08-11)</h3>
       <p>Namecheap reworked the <strong>Advanced DNS → Add New Record → SRV Record</strong> row. It no longer
       has a <code>Host</code> field: the label is split into <strong><code>Service</code></strong>
       (<code>_jmap</code>) + <strong><code>Protocol</code></strong> (<code>_tcp</code>), followed by
@@ -521,8 +521,26 @@
       <code>Protocol: {protocol}</code> in place of <code>Host: {host}</code>, and the header says there's no
       Host field. Pure data — the split tokens already existed for GoDaddy, so no interpreter change in
       either front-end. All 13 Thundermail records live at the apex, so plain <code>{protocol}</code>
-      (<code>_tcp</code>) is correct; the subdomain-suffix case never arises. Namecheap's MX / TXT / CNAME
-      rows are unchanged.</p>
+      (<code>_tcp</code>) is correct; the subdomain-suffix case never arises.</p>
+      <p>Screenshots of the other three rows, from the same ticket, followed (issue
+      <a href="https://github.com/thunderbird/dns-scripts/issues/19">#19</a>) — the live labels are
+      <code>MX Record: Host / Mail Server / Priority</code>,
+      <code>TXT Record: Host / Value</code> and
+      <code>CNAME Record: Host / Target</code>, each with a TTL dropdown:</p>
+      <ul>
+        <li><strong>TXT</strong> is <code>Host</code> + <code>Value</code> — exactly what we emit, no
+          change.</li>
+        <li><strong>MX</strong> labels the target field <strong><code>Mail Server</code></strong>, not
+          <code>Value</code>; and because it lives in <em>Mail Settings → Custom MX</em>, the type is fixed
+          text rather than a dropdown, so there is <strong>no Type field to fill in</strong>. The
+          <code>Type: MX Record</code> row we used to emit was unfillable (and, with the per-cell copy
+          buttons, offered a copy into a field that doesn't exist), so it's gone — the MX block now matches
+          TXT/CNAME, which never carried one.</li>
+        <li><strong>CNAME</strong> labels its value field <strong><code>Target</code></strong>, not
+          <code>Value</code>. The <code>(no trailing dot)</code> reader hint stays.</li>
+      </ul>
+      <p>Again pure data, no interpreter change. Verified end-to-end: full suite green,
+      <code>glamrocnamecheap.com</code> still 13/13 exit 0.</p>
     </details>
   </main>
 </body>

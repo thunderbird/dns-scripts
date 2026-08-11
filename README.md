@@ -172,8 +172,8 @@ For example, a missing DKIM CNAME prints:
 ```
 • CNAME tm1._domainkey
   Namecheap → Advanced DNS → Add New Record → CNAME Record:
-      Host:  tm1._domainkey
-      Value: tm1.glamrocnamecheap.com.dkim.thunderhosted.com   (no trailing dot)
+      Host:   tm1._domainkey
+      Target: tm1.glamrocnamecheap.com.dkim.thunderhosted.com   (no trailing dot)
 ```
 
 ### Example

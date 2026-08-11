@@ -226,7 +226,7 @@ class TestCopyText(unittest.TestCase):
         self.assertEqual(len([l for l in fenced if l.strip()]), len(labels))
         for label in labels:
             self.assertTrue(any(l.startswith(f"{label}:") for l in fenced), label)
-        # Namecheap's Value template carries a trailing "(no trailing dot)" hint,
+        # Namecheap's CNAME Target template carries a trailing "(no trailing dot)" hint,
         # so the target is inside the line rather than at the end of it.
         self.assertTrue(any("tm1.example.com.dkim.thunderhosted.com" in l
                             for l in fenced))

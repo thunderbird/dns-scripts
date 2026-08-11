@@ -90,7 +90,12 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   [SRV article](https://www.namecheap.com/support/knowledgebase/article.aspx/9765/2237/how-to-create-a-srv-record-for-a-domain/)
   matches, and notes a *subdomain* is appended to the Protocol field (`_tcp.mc`)
   rather than typed into a host box — irrelevant for us, since all 13 records are at
-  the apex, so plain `{protocol}` is right. MX/TXT/CNAME rows are unchanged.
+  the apex, so plain `{protocol}` is right. Screenshots of the other three rows from the
+  same ticket (issue #19) settled those too: **TXT is `Host` + `Value`, unchanged**;
+  **MX** labels its target **`Mail Server`** (not `Value`) and, living in *Mail Settings →
+  Custom MX*, shows the type as fixed text with **no Type field to fill** — so the MX block
+  emits no `Type` row, like TXT/CNAME; **CNAME** labels its value **`Target`** (not
+  `Value`), keeping the `(no trailing dot)` hint.
   `cosmotown` was verified against a live panel (cosmotown.example.com). Its quirks:
   records are grouped into per-type sections each with its own `+ Quick Add`
   (so there's no Type field); columns are `Priority`/`Host`/`Points to` (MX),

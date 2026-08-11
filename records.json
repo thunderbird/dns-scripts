@@ -26,7 +26,7 @@
     "namecheap": {
       "MX": {
         "header": "Namecheap → Advanced DNS → Mail Settings: set 'Custom MX', then add:",
-        "fields": [["Type", "MX Record"], ["Host", "{host}"], ["Value", "{target}"], ["Priority", "{priority}"]]
+        "fields": [["Host", "{host}"], ["Mail Server", "{target}"], ["Priority", "{priority}"]]
       },
       "SRV": {
         "header": "Namecheap → Advanced DNS → Add New Record → SRV Record (no Host field — the label splits into Service + Protocol):",
@@ -38,7 +38,7 @@
       },
       "CNAME": {
         "header": "Namecheap → Advanced DNS → Add New Record → CNAME Record:",
-        "fields": [["Host", "{host}"], ["Value", "{value}   (no trailing dot)"]]
+        "fields": [["Host", "{host}"], ["Target", "{value}   (no trailing dot)"]]
       }
     },
     "squarespace": {
