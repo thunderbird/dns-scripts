@@ -12,11 +12,20 @@ const TOKEN = /\{(\w+)\}/g;
 const HOSTNAME = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$/;
 
 // How to word a mismatch, per match_mode (kept in sync with the CLI).
-const VERBS = { exact: "expected", exact_ignore_weight: "expected (any weight)" };
+const VERBS = {
+  exact: "expected",
+  srv_lowest_priority: "expected (any weight, lowest priority number)",
+};
+
+// Wording for the "conflict" status: the record is published, but another target at
+// the same name can outrank it. Mirrors thunderbird-accounts#1163. (In sync with the CLI.)
+const CONFLICT =
+  "conflicts: another target here has an equal or lower priority number — " +
+  "give the Thundermail target the lowest number (any weight is fine)";
 
 // The same relaxation, as a suffix for the "Expected" column of the copied
 // results table (web-only; the CLI has no clipboard).
-const MATCH_NOTES = { exact: "", exact_ignore_weight: " (any weight)" };
+const MATCH_NOTES = { exact: "", srv_lowest_priority: " (any weight, lowest priority number)" };
 
 const MAX_VALUE = 300; // cap displayed answer length to avoid DOM bloat
 const cap = (s) => (s.length <= MAX_VALUE ? s : s.slice(0, MAX_VALUE) + "…");
@@ -84,31 +93,58 @@ function valueOf(ctx, cfg, key) {
   return interpolate(cfg.value_templates[ctx.type][key], ctx);
 }
 
-// (priority, port, target) from an SRV record string — the fields that matter when
-// weight is ignored. null if the string isn't four space-separated fields, so a
-// malformed record can never match.
-function srvFields(record) {
+// [priority, "port target"] from an SRV record string: the number the relational
+// check compares, and the identity of the service endpoint. null unless the string is
+// four space-separated fields with a numeric priority, so a malformed record can never
+// match. "[0-9]" rather than "\d" to stay identical to the Python twin, whose "\d"
+// would also match non-ASCII digits.
+function srvParts(record) {
   const parts = record.trim().split(/\s+/);
-  return parts.length === 4 ? `${parts[0]} ${parts[2]} ${parts[3]}` : null;
+  if (parts.length !== 4 || !/^[0-9]+$/.test(parts[0])) return null;
+  return [Number(parts[0]), `${parts[2]} ${parts[3]}`];
 }
 
-// True if `expected` matches any answer. mode "exact" (MX/CNAME) requires a
-// whole-record equality so a target with extra labels appended (e.g. a missing
-// trailing dot turning "mail.thundermail.com" into "mail.thundermail.com.example.com")
-// fails; mode "contains" (TXT) keeps the substring test the prefix fragments
-// (MTA-STS/TLSRPT/DMARC) rely on; mode "exact_ignore_weight" (SRV) is "exact" on
-// priority/port/target but accepts any weight, because the weight only matters between
-// competing targets at the same priority — we publish a single target, and some panels
-// (Plesk/METANET) offer only a fixed dropdown of weights. Case-insensitive; kept in
-// sync with the CLI.
-function matches(expected, answers, mode) {
+// Status of `expected` against every answer at its name: "ok", "missing", or (SRV
+// only) "conflict".
+//
+// mode "exact" (MX/CNAME) requires a whole-record equality so a target with extra
+// labels appended (e.g. a missing trailing dot turning "mail.thundermail.com" into
+// "mail.thundermail.com.example.com") fails; mode "contains" (TXT) keeps the substring
+// test the prefix fragments (MTA-STS/TLSRPT/DMARC) rely on.
+//
+// mode "srv_lowest_priority" (SRV) is the relational rule from
+// thunderbird-accounts#1163: port and target must match exactly, the weight is not
+// compared (it only splits load between competing targets at the same priority, and we
+// publish a single target — plus Plesk/METANET offers only a fixed dropdown of
+// weights), and the priority is judged against the other answers instead of against
+// our published number: our target must carry a strictly LOWER priority number than
+// any other target at that name. So a working setup at priority 10 passes, while our
+// record tied with or out-ranked by someone else's is a "conflict" — it is published
+// but may not win. Unparseable answers are ignored for that comparison (they can't be
+// ranked), but never match. Case-insensitive; kept in sync with the CLI.
+function checkAnswers(expected, answers, mode) {
   const exp = expected.toLowerCase();
-  if (mode === "exact") return answers.some((a) => a.toLowerCase() === exp);
-  if (mode === "exact_ignore_weight") {
-    const want = srvFields(exp);
-    return want !== null && answers.some((a) => srvFields(a.toLowerCase()) === want);
+  if (mode === "exact") {
+    return answers.some((a) => a.toLowerCase() === exp) ? "ok" : "missing";
   }
-  return answers.some((a) => a.toLowerCase().includes(exp));
+  if (mode === "srv_lowest_priority") {
+    const want = srvParts(exp);
+    if (want === null) return "missing";
+    const parsed = answers.map((a) => srvParts(a.toLowerCase())).filter((p) => p !== null);
+    const ours = parsed.filter(([, key]) => key === want[1]).map(([prio]) => prio);
+    if (!ours.length) return "missing";
+    const best = Math.min(...ours);
+    const outranked = parsed.some(([prio, key]) => key !== want[1] && prio <= best);
+    return outranked ? "conflict" : "ok";
+  }
+  return answers.some((a) => a.toLowerCase().includes(exp)) ? "ok" : "missing";
+}
+
+// The FAIL line's explanation: what we wanted, or why what's there conflicts.
+// Kept in sync with failure_text() in verify_thundermail_dns.py.
+function failureText(mode, status, expected) {
+  if (status === "conflict") return CONFLICT;
+  return `${VERBS[mode] ?? "expected to contain"}: ${expected}`;
 }
 
 function renderFix(cfg, provider, ctx) {
@@ -160,7 +196,7 @@ function fixTable(cfg, provider, rtype, ctxs) {
 // "(no trailing dot)"), which is guidance for the reader — useful on screen and in
 // the CLI, but it must never ride along into the panel on a paste. So: the
 // clipboard gets everything up to the first run of two-plus spaces. Every real
-// value (SRV "0 1 443 host", SPF, …) is single-spaced, so nothing else is touched.
+// value (SRV "0 0 443 host", SPF, …) is single-spaced, so nothing else is touched.
 const copyValue = (s) => s.split(/\s{2,}/)[0];
 
 // One table cell: the value, plus a "⧉" button that copies just that value
@@ -303,7 +339,10 @@ function resultsMarkdown(domain, resolver, passed, rows, url) {
     mdRow(["---", "---", "---", "---"]),
   ];
   for (const r of rows) {
-    out.push(mdRow([r.ok ? "OK" : "**FAIL**", r.record, mdCell(r.expected), mdCell(r.found)]));
+    // A published-but-out-ranked SRV gets its own status word: "FAIL" would send the
+    // reader looking for a missing record instead of a competing one.
+    const status = r.ok ? "OK" : r.status === "conflict" ? "**CONFLICT**" : "**FAIL**";
+    out.push(mdRow([status, r.record, mdCell(r.expected), mdCell(r.found)]));
   }
   out.push("", `Re-check: ${url}`);
   return out.join("\n");
@@ -450,8 +489,8 @@ async function runCheck(evt) {
       }
 
       const mode = CFG.value_templates[rec.type].match_mode ?? "contains";
-      const ok = matches(expected, answers, mode);
-      const verb = VERBS[mode] ?? "expected to contain";
+      const status = checkAnswers(expected, answers, mode);
+      const ok = status === "ok";
       const row = el("div", "row");
       row.appendChild(el("span", `badge ${ok ? "ok" : "fail"}`, ok ? "OK" : "FAIL"));
       row.appendChild(el("span", "rlabel", labelOf(rec)));
@@ -460,12 +499,13 @@ async function runCheck(evt) {
         passed++;
       } else {
         row.appendChild(el("span", "rval miss",
-          `${verb}: ${expected}  —  got: ${cap(actual) || "(nothing)"}`));
+          `${failureText(mode, status, expected)}  —  got: ${cap(actual) || "(nothing)"}`));
         failures.push(ctx);
       }
       groupEl.appendChild(row);
       rows.push({
         ok,
+        status,
         record: `${rec.type} ${labelOf(rec)}`,
         expected: `${expected}${MATCH_NOTES[mode] ?? " (must contain)"}`,
         found: cap(actual) || "(nothing)",

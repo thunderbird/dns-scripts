@@ -31,82 +31,153 @@ def build_ctx(rec: dict, domain: str = "example.com") -> dict:
     return ctx
 
 
-class TestMatches(unittest.TestCase):
+SRV = "srv_lowest_priority"
+
+
+class TestCheckAnswers(unittest.TestCase):
     def test_exact_rejects_appended_target(self):
         # #10 regression: a target with the zone name appended must not pass.
-        self.assertFalse(v.matches(
-            "0 1 443 mail.thundermail.com",
-            ["0 1 443 mail.thundermail.com.example.com"],
+        self.assertEqual("missing", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com.example.com"],
             "exact",
         ))
 
     def test_exact_accepts_correct_target(self):
-        self.assertTrue(v.matches(
-            "0 1 443 mail.thundermail.com",
-            ["0 1 443 mail.thundermail.com"],
+        self.assertEqual("ok", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com"],
             "exact",
         ))
 
     def test_exact_accepts_among_multiple_answers(self):
-        self.assertTrue(v.matches(
+        self.assertEqual("ok", v.check_answers(
             "10 mail.thundermail.com",
             ["20 backup.example.com", "10 mail.thundermail.com"],
             "exact",
         ))
 
     def test_exact_is_case_insensitive(self):
-        self.assertTrue(v.matches(
+        self.assertEqual("ok", v.check_answers(
             "tm1.example.com.dkim.thunderhosted.com",
             ["TM1.EXAMPLE.COM.DKIM.THUNDERHOSTED.COM"],
             "exact",
         ))
 
     def test_exact_rejects_empty(self):
-        self.assertFalse(v.matches("10 mail.thundermail.com", [], "exact"))
+        self.assertEqual("missing",
+                         v.check_answers("10 mail.thundermail.com", [], "exact"))
 
     def test_contains_accepts_prefix_fragment(self):
-        self.assertTrue(v.matches(
+        self.assertEqual("ok", v.check_answers(
             "v=STSv1;", ["v=STSv1; id=18139500144460329770"], "contains"))
 
     def test_contains_rejects_absent_fragment(self):
-        self.assertFalse(v.matches(
+        self.assertEqual("missing", v.check_answers(
             "v=STSv1;", ["v=spf1 include:spf.thundermail.com -all"], "contains"))
 
-    def test_ignore_weight_accepts_other_weight(self):
-        # Plesk/METANET can only pick weights in steps of 5, so weight 0 (or any
-        # other) must pass while priority/port/target still match exactly.
-        self.assertTrue(v.matches(
-            "0 1 443 mail.thundermail.com",
-            ["0 0 443 mail.thundermail.com"],
-            "exact_ignore_weight",
+    def test_srv_accepts_other_weight(self):
+        # Plesk/METANET can only pick weights in steps of 5, so any weight must
+        # pass while port/target still match exactly (#14).
+        self.assertEqual("ok", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 5 443 mail.thundermail.com"],
+            SRV,
         ))
 
-    def test_ignore_weight_still_rejects_appended_target(self):
-        # The #10 protection must survive: only the weight is exempt.
-        self.assertFalse(v.matches(
-            "0 1 443 mail.thundermail.com",
+    def test_srv_still_rejects_appended_target(self):
+        # The #10 protection must survive: only weight and priority are relaxed.
+        self.assertEqual("missing", v.check_answers(
+            "0 0 443 mail.thundermail.com",
             ["0 0 443 mail.thundermail.com.example.com"],
-            "exact_ignore_weight",
+            SRV,
         ))
 
-    def test_ignore_weight_rejects_wrong_priority_or_port(self):
-        self.assertFalse(v.matches(
-            "0 1 443 mail.thundermail.com",
-            ["10 0 443 mail.thundermail.com"],
-            "exact_ignore_weight",
+    def test_srv_accepts_higher_priority_number_when_uncontested(self):
+        # accounts#1163: the priority is judged against the other answers, not
+        # against our published 0 — alone at 10, our target still wins.
+        self.assertEqual("ok", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["10 1 443 mail.thundermail.com"],
+            SRV,
         ))
-        self.assertFalse(v.matches(
-            "0 1 993 mail.thundermail.com",
+
+    def test_srv_rejects_wrong_port(self):
+        self.assertEqual("missing", v.check_answers(
+            "0 0 993 mail.thundermail.com",
             ["0 0 443 mail.thundermail.com"],
-            "exact_ignore_weight",
+            SRV,
         ))
 
-    def test_ignore_weight_rejects_malformed_answer(self):
-        self.assertFalse(v.matches(
-            "0 1 443 mail.thundermail.com",
+    def test_srv_rejects_malformed_answer(self):
+        self.assertEqual("missing", v.check_answers(
+            "0 0 443 mail.thundermail.com",
             ["0 443 mail.thundermail.com", ""],
-            "exact_ignore_weight",
+            SRV,
         ))
+
+    def test_srv_rejects_non_numeric_priority(self):
+        self.assertEqual("missing", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["x 0 443 mail.thundermail.com"],
+            SRV,
+        ))
+
+    def test_srv_conflict_on_tie(self):
+        # The accounts#1163 screenshot: our record is published, but another target
+        # sits at the same priority number, so it can win instead.
+        self.assertEqual("conflict", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com", "0 0 443 mail.example.net"],
+            SRV,
+        ))
+
+    def test_srv_conflict_when_outranked(self):
+        self.assertEqual("conflict", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["10 0 443 mail.thundermail.com", "5 0 443 mail.example.net"],
+            SRV,
+        ))
+
+    def test_srv_ok_when_we_outrank_the_other_target(self):
+        self.assertEqual("ok", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com", "10 0 443 mail.example.net"],
+            SRV,
+        ))
+
+    def test_srv_duplicate_of_our_own_record_is_not_a_conflict(self):
+        # Same port+target at another weight is our record, not a competitor.
+        self.assertEqual("ok", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com", "0 5 443 mail.thundermail.com"],
+            SRV,
+        ))
+
+    def test_srv_unrankable_answer_is_ignored_for_conflicts(self):
+        self.assertEqual("ok", v.check_answers(
+            "0 0 443 mail.thundermail.com",
+            ["0 0 443 mail.thundermail.com", "garbage"],
+            SRV,
+        ))
+
+
+class TestFailureText(unittest.TestCase):
+    def test_missing_quotes_the_expected_record(self):
+        text = v.failure_text(SRV, "missing", "0 0 443 mail.thundermail.com")
+        self.assertIn("0 0 443 mail.thundermail.com", text)
+        self.assertIn("any weight", text)
+
+    def test_conflict_explains_the_priority_rule(self):
+        text = v.failure_text(SRV, "conflict", "0 0 443 mail.thundermail.com")
+        self.assertIn("conflicts", text)
+        self.assertIn("lowest number", text)
+        # The expected record is not the point when the record is already there.
+        self.assertNotIn("0 0 443", text)
+
+    def test_unknown_mode_falls_back_to_contains_wording(self):
+        self.assertEqual("expected to contain: v=STSv1;",
+                         v.failure_text("contains", "missing", "v=STSv1;"))
 
 
 class TestResolveRecord(unittest.TestCase):
@@ -145,16 +216,22 @@ class TestValueTemplates(unittest.TestCase):
             self.assertIn("match", tpl, rtype)
             self.assertIn("value", tpl, rtype)
             self.assertIn(tpl.get("match_mode"),
-                          ("exact", "exact_ignore_weight", "contains"), rtype)
+                          ("exact", "srv_lowest_priority", "contains"), rtype)
 
     def test_target_bearing_types_are_exact(self):
-        # MX/SRV/CNAME carry a target that must match a whole answer (see #10);
-        # SRV exempts only the weight field (see #14).
+        # MX/SRV/CNAME carry a target that must match a whole answer (see #10); SRV
+        # exempts the weight (#14) and judges priority relationally (accounts#1163).
         for rtype in ("MX", "CNAME"):
             self.assertEqual(CFG["value_templates"][rtype]["match_mode"], "exact")
-        self.assertEqual(CFG["value_templates"]["SRV"]["match_mode"],
-                         "exact_ignore_weight")
+        self.assertEqual(CFG["value_templates"]["SRV"]["match_mode"], SRV)
         self.assertEqual(CFG["value_templates"]["TXT"]["match_mode"], "contains")
+
+    def test_published_srv_weight_is_zero(self):
+        # accounts#1163 decision 1: the recommended weight is 0, the lowest — the
+        # value every provider's fix instructions print.
+        for rec in CFG["records"]:
+            if rec["type"] == "SRV":
+                self.assertEqual(rec["weight"], 0, rec["host"])
 
 
 class TestRecordsJsonLint(unittest.TestCase):

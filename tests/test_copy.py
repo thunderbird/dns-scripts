@@ -69,20 +69,27 @@ COPY_VALUE_CASES = [
     ("tm1.example.com.dkim.thunderhosted.com   (no trailing dot)",
      "tm1.example.com.dkim.thunderhosted.com"),
     # Single-spaced values are never split — SRV packs four fields into one.
-    ("0 1 443 mail.thundermail.com", "0 1 443 mail.thundermail.com"),
+    ("0 0 443 mail.thundermail.com", "0 0 443 mail.thundermail.com"),
     ("v=spf1 include:spf.thundermail.com -all", "v=spf1 include:spf.thundermail.com -all"),
     # A parenthetical that IS the value (METANET's weight dropdown) survives.
     ("niedrig (0)", "niedrig (0)"),
     ("", ""),                            # e.g. the Host field at the apex
 ]
 
+SRV_NOTE = " (any weight, lowest priority number)"
+
 RESULTS_ROWS = [
-    {"ok": False, "record": "MX @", "expected": "10 mail.thundermail.com",
-     "found": "(nothing)"},
-    {"ok": True, "record": "SRV _jmap._tcp",
-     "expected": "0 1 443 mail.thundermail.com (any weight)",
+    {"ok": False, "status": "missing", "record": "MX @",
+     "expected": "10 mail.thundermail.com", "found": "(nothing)"},
+    {"ok": True, "status": "ok", "record": "SRV _jmap._tcp",
+     "expected": "0 0 443 mail.thundermail.com" + SRV_NOTE,
      "found": "0 5 443 mail.thundermail.com"},
-    {"ok": True, "record": "TXT @ (SPF)",
+    # Published, but tied with a competing target (accounts#1163) — its own status
+    # word, since "FAIL" would send the reader hunting for a missing record.
+    {"ok": False, "status": "conflict", "record": "SRV _imaps._tcp",
+     "expected": "0 0 993 mail.thundermail.com" + SRV_NOTE,
+     "found": "0 0 993 mail.thundermail.com / 0 0 993 mail.example.net"},
+    {"ok": True, "status": "ok", "record": "TXT @ (SPF)",
      "expected": "v=spf1 include:spf.thundermail.com -all (must contain)",
      "found": "v=spf1 include:spf.thundermail.com -all"},
 ]
@@ -189,13 +196,16 @@ class TestCopyText(unittest.TestCase):
     def test_results_markdown(self):
         lines = self.out["results"].splitlines()
         self.assertEqual(lines[0], "**Thundermail DNS check — example.com**")
-        self.assertIn("2 passed, 1 failed · resolver: Cloudflare (1.1.1.1)", lines)
+        self.assertIn("2 passed, 2 failed · resolver: Cloudflare (1.1.1.1)", lines)
         self.assertIn("| Status | Record | Expected | Found |", lines)
         self.assertIn("| --- | --- | --- | --- |", lines)
         self.assertIn("| **FAIL** | MX @ | 10 mail.thundermail.com | (nothing) |", lines)
         self.assertIn(
-            "| OK | SRV _jmap._tcp | 0 1 443 mail.thundermail.com (any weight) "
+            f"| OK | SRV _jmap._tcp | 0 0 443 mail.thundermail.com{SRV_NOTE} "
             "| 0 5 443 mail.thundermail.com |", lines)
+        self.assertIn(
+            f"| **CONFLICT** | SRV _imaps._tcp | 0 0 993 mail.thundermail.com{SRV_NOTE} "
+            "| 0 0 993 mail.thundermail.com / 0 0 993 mail.example.net |", lines)
         # One row per record, plus header + separator.
         self.assertEqual(len([l for l in lines if l.startswith("|")]),
                          len(RESULTS_ROWS) + 2)
@@ -210,7 +220,7 @@ class TestCopyText(unittest.TestCase):
         # Porkbun leaves the apex Host empty; an empty cell in an email reads as
         # an omission, so it's spelled out.
         self.assertIn("| MX | (leave blank) | 10 | mail.thundermail.com |", lines)
-        self.assertIn("| SRV | _jmap._tcp | 0 | 1 443 mail.thundermail.com |", lines)
+        self.assertIn("| SRV | _jmap._tcp | 0 | 0 443 mail.thundermail.com |", lines)
         # One table per record type.
         self.assertEqual(lines.count("| --- | --- | --- | --- |"), 2)
 

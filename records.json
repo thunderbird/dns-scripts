@@ -2,11 +2,11 @@
   "mail_target": "mail.thundermail.com",
   "records": [
     {"type": "MX", "host": "@", "priority": 10, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_jmap._tcp", "priority": 0, "weight": 1, "port": 443, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_caldavs._tcp", "priority": 0, "weight": 1, "port": 443, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_carddavs._tcp", "priority": 0, "weight": 1, "port": 443, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_imaps._tcp", "priority": 0, "weight": 1, "port": 993, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_submission._tcp", "priority": 0, "weight": 1, "port": 587, "target": "mail.thundermail.com"},
+    {"type": "SRV", "host": "_jmap._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com"},
+    {"type": "SRV", "host": "_caldavs._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com"},
+    {"type": "SRV", "host": "_carddavs._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com"},
+    {"type": "SRV", "host": "_imaps._tcp", "priority": 0, "weight": 0, "port": 993, "target": "mail.thundermail.com"},
+    {"type": "SRV", "host": "_submission._tcp", "priority": 0, "weight": 0, "port": 587, "target": "mail.thundermail.com"},
     {"type": "TXT", "host": "@", "label": "@ (SPF)", "value": "v=spf1 include:spf.thundermail.com -all", "match": "v=spf1 include:spf.thundermail.com -all"},
     {"type": "TXT", "host": "_mta-sts", "value": "v=STSv1; id=18139500144460329770", "match": "v=STSv1;"},
     {"type": "TXT", "host": "_smtp._tls", "value": "v=TLSRPTv1; rua=mailto:postmaster@{domain}", "match": "v=TLSRPTv1;"},
@@ -18,7 +18,7 @@
   "group_headers": {"MX": "MX:", "SRV": "SRV:", "TXT": "TXT:", "CNAME": "CNAME (DKIM):"},
   "value_templates": {
     "MX": {"match": "{priority} {target}", "value": "{target}", "match_mode": "exact"},
-    "SRV": {"match": "{priority} {weight} {port} {target}", "value": "{weight} {port} {target}", "match_mode": "exact_ignore_weight"},
+    "SRV": {"match": "{priority} {weight} {port} {target}", "value": "{weight} {port} {target}", "match_mode": "srv_lowest_priority"},
     "TXT": {"match": "{match}", "value": "{value}", "match_mode": "contains"},
     "CNAME": {"match": "{target}", "value": "{target}", "match_mode": "exact"}
   },
@@ -227,7 +227,7 @@
         "fields": [["Eintragstyp (Type)", "MX"], ["Domainname (Host)", "{subhost}"], ["Priorität (Priority)", "{priority}"], ["Mail-Exchange-Server (Target)", "{target}"]]
       },
       "SRV": {
-        "header": "UNVERIFIED — the SRV field layout is confirmed from a live METANET form; confirm the rest against your panel. Plesk → DNS-Einstellungen → 'Eintrag hinzufügen' → Eintragstyp SRV. Plesk splits the label into Service-Name and Protokoll and wants them WITHOUT the leading underscore ('imaps', 'tcp' — the form's own hint is 'ohne Unterstrich'); leave Domainname EMPTY for the root domain (do NOT type @). Priorität and 'Relative Gewichtung' are dropdowns: pick 'sehr hoch (0)' for priority 0, and for the weight pick 'niedrig (0)' — the dropdown only offers 0/5/10…50, so Thundermail's weight of 1 is unenterable; this checker accepts any weight because with a single target the weight has no effect. Enter Zielhost WITHOUT a trailing dot (Plesk adds it), then click 'Aktualisieren' (Update) to commit. Prefer not to do this yourself? METANET's paid Premium Service «Individuelle DNS-Einstellungen» will enter the records for you — email support@metanet.ch:",
+        "header": "UNVERIFIED — the SRV field layout is confirmed from a live METANET form; confirm the rest against your panel. Plesk → DNS-Einstellungen → 'Eintrag hinzufügen' → Eintragstyp SRV. Plesk splits the label into Service-Name and Protokoll and wants them WITHOUT the leading underscore ('imaps', 'tcp' — the form's own hint is 'ohne Unterstrich'); leave Domainname EMPTY for the root domain (do NOT type @). Priorität and 'Relative Gewichtung' are dropdowns: pick 'sehr hoch (0)' for priority 0, and for the weight pick 'niedrig (0)' — the recommended weight is 0, and in any case this checker accepts any weight because with a single target the weight has no effect. Enter Zielhost WITHOUT a trailing dot (Plesk adds it), then click 'Aktualisieren' (Update) to commit. Prefer not to do this yourself? METANET's paid Premium Service «Individuelle DNS-Einstellungen» will enter the records for you — email support@metanet.ch:",
         "fields": [["Eintragstyp (Type)", "SRV"], ["Service-Name (Service)", "{bareservice}"], ["Protokoll (Protocol)", "{bareprotocol}"], ["Domainname (Host)", "{srvsubhost}"], ["Priorität (Priority)", "{priority}"], ["Relative Gewichtung (Weight)", "niedrig (0)"], ["Zielhost (Target host)", "{target}"], ["Zielport (Target port)", "{port}"]]
       },
       "TXT": {

@@ -12,10 +12,11 @@ Usage:
     uv run verify_thundermail_dns.py glamrocnamecheap.com
     uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
 
-Exit status is 0 only if every expected record is present and correct. One
-deliberate exception: the SRV weight is not compared (priority/port/target are),
-because with a single target the weight has no effect and some panels only offer a
-fixed dropdown of weights — see the exact_ignore_weight mode in records.json.
+Exit status is 0 only if every expected record is present and correct. SRV is
+checked relationally rather than against a literal (thunderbird-accounts#1163):
+the port and target must match exactly, the weight is not compared at all, and the
+priority only has to be a LOWER number than any other target at that name — see
+the srv_lowest_priority mode in records.json.
 
 Pass --provider to print exactly what to enter in that DNS provider's control
 panel for each FAILING record (accounting for provider quirks such as how the
@@ -66,7 +67,13 @@ _HOSTNAME = re.compile(
 _MAX_VALUE = 200  # cap displayed answer length to avoid pathological output
 
 # How to word a mismatch, per match_mode (kept in sync with app.js).
-_VERBS = {"exact": "expected", "exact_ignore_weight": "expected (any weight)"}
+_VERBS = {"exact": "expected",
+          "srv_lowest_priority": "expected (any weight, lowest priority number)"}
+
+# Wording for the "conflict" status: the record is published, but another target at
+# the same name can outrank it. Mirrors thunderbird-accounts#1163. (In sync with app.js.)
+_CONFLICT = ("conflicts: another target here has an equal or lower priority number — "
+             "give the Thundermail target the lowest number (any weight is fine)")
 
 
 def sanitize(s: str) -> str:
@@ -129,31 +136,60 @@ def value_of(ctx: dict, cfg: dict, key: str) -> str:
     return interpolate(cfg["value_templates"][ctx["type"]][key], ctx)
 
 
-def srv_fields(record: str) -> tuple[str, str, str] | None:
-    """(priority, port, target) from an SRV record string — the fields that matter
-    when weight is ignored. None if the string isn't four space-separated fields,
-    so a malformed record can never match."""
+def srv_parts(record: str) -> tuple[int, str] | None:
+    """(priority, "port target") from an SRV record string: the number the relational
+    check compares, and the identity of the service endpoint. None unless the string
+    is four space-separated fields with a numeric priority, so a malformed record can
+    never match. `[0-9]` rather than `\\d`, which in Python (unlike JS) also matches
+    non-ASCII digits — the JS twin must reject exactly the same strings."""
     parts = record.split()
-    return (parts[0], parts[2], parts[3]) if len(parts) == 4 else None
+    if len(parts) != 4 or not re.fullmatch(r"[0-9]+", parts[0]):
+        return None
+    return (int(parts[0]), f"{parts[2]} {parts[3]}")
 
 
-def matches(expected: str, answers: list[str], mode: str) -> bool:
-    """True if `expected` matches any answer. mode 'exact' (MX/CNAME) requires a
-    whole-record equality so a target with extra labels appended (e.g. a missing
-    trailing dot turning `mail.thundermail.com` into `mail.thundermail.com.example.com`)
-    fails; mode 'contains' (TXT) keeps the substring test the prefix fragments
-    (MTA-STS/TLSRPT/DMARC) rely on; mode 'exact_ignore_weight' (SRV) is 'exact' on
-    priority/port/target but accepts any weight, because the weight only matters
-    between competing targets at the same priority — we publish a single target, and
-    some panels (Plesk/METANET) offer only a fixed dropdown of weights. Case-insensitive;
-    kept in sync with app.js."""
+def check_answers(expected: str, answers: list[str], mode: str) -> str:
+    """Status of `expected` against every answer at its name: 'ok', 'missing', or
+    (SRV only) 'conflict'.
+
+    mode 'exact' (MX/CNAME) requires a whole-record equality so a target with extra
+    labels appended (e.g. a missing trailing dot turning `mail.thundermail.com` into
+    `mail.thundermail.com.example.com`) fails; mode 'contains' (TXT) keeps the
+    substring test the prefix fragments (MTA-STS/TLSRPT/DMARC) rely on.
+
+    mode 'srv_lowest_priority' (SRV) is the relational rule from
+    thunderbird-accounts#1163: port and target must match exactly, the weight is not
+    compared (it only splits load between competing targets at the same priority, and
+    we publish a single target — plus Plesk/METANET offers only a fixed dropdown of
+    weights), and the priority is judged against the other answers instead of against
+    our published number: our target must carry a strictly LOWER priority number than
+    any other target at that name. So a working setup at priority 10 passes, while our
+    record tied with or out-ranked by someone else's is a 'conflict' — it is published
+    but may not win. Unparseable answers are ignored for that comparison (they can't be
+    ranked), but never match. Case-insensitive; kept in sync with app.js."""
     exp = expected.lower()
     if mode == "exact":
-        return any(exp == a.lower() for a in answers)
-    if mode == "exact_ignore_weight":
-        want = srv_fields(exp)
-        return want is not None and any(srv_fields(a.lower()) == want for a in answers)
-    return any(exp in a.lower() for a in answers)
+        return "ok" if any(exp == a.lower() for a in answers) else "missing"
+    if mode == "srv_lowest_priority":
+        want = srv_parts(exp)
+        if want is None:
+            return "missing"
+        parsed = [p for p in (srv_parts(a.lower()) for a in answers) if p is not None]
+        ours = [prio for prio, key in parsed if key == want[1]]
+        if not ours:
+            return "missing"
+        best = min(ours)
+        outranked = any(prio <= best for prio, key in parsed if key != want[1])
+        return "conflict" if outranked else "ok"
+    return "ok" if any(exp in a.lower() for a in answers) else "missing"
+
+
+def failure_text(mode: str, status: str, expected: str) -> str:
+    """The FAIL line's explanation: what we wanted, or why what's there conflicts.
+    Kept in sync with failureText() in app.js."""
+    if status == "conflict":
+        return _CONFLICT
+    return f"{_VERBS.get(mode, 'expected to contain')}: {expected}"
 
 
 def render_fix(cfg: dict, provider: str, ctx: dict) -> list[str]:
@@ -258,12 +294,13 @@ def main() -> int:
         actual = " / ".join(answers)
         shown = cap(actual)  # match per-answer; display a bounded slice of the join
         mode = cfg["value_templates"][rec["type"]].get("match_mode", "contains")
-        if matches(expected, answers, mode):
+        status = check_answers(expected, answers, mode)
+        if status == "ok":
             print(f"  {GREEN}OK{RESET}   {label(rec):<46} {shown}")
             passed += 1
         else:
-            verb = _VERBS.get(mode, "expected to contain")
-            print(f"  {RED}FAIL{RESET} {label(rec):<46} {verb}: {expected}")
+            print(f"  {RED}FAIL{RESET} {label(rec):<46} "
+                  f"{failure_text(mode, status, expected)}")
             print(f"       {'':<46} got: {shown or '<empty>'}")
             failures.append(ctx)
 

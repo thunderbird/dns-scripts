@@ -9,7 +9,8 @@
 // app.js is a plain browser script, not a module — its only top-level side effect
 // is a trailing `loadConfig().then(...)`. We stub `fetch` to stay pending forever,
 // so that promise never resolves and its DOM-touching callback never fires; the
-// function declarations we need (matches / interpolate / resolveRecord / valueOf)
+// function declarations we need (checkAnswers / failureText / interpolate /
+// resolveRecord / valueOf)
 // are left on the sandbox global, closures over the top-level consts intact.
 
 import fs from "node:fs";
@@ -40,7 +41,7 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(appSrc, sandbox, { filename: "app.js" });
 
-const { matches, interpolate, resolveRecord } = sandbox;
+const { checkAnswers, failureText, interpolate, resolveRecord } = sandbox;
 const valueOf = sandbox.valueOf; // own global prop shadows Object.prototype.valueOf
 
 const { cfg, matchCases, resolveCases } = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -48,7 +49,8 @@ const { cfg, matchCases, resolveCases } = JSON.parse(fs.readFileSync(0, "utf8"))
 const out = { match: [], resolve: [] };
 
 for (const c of matchCases) {
-  out.match.push(matches(c.expected, c.answers, c.mode));
+  const status = checkAnswers(c.expected, c.answers, c.mode);
+  out.match.push({ status, text: failureText(c.mode, status, c.expected) });
 }
 
 for (const c of resolveCases) {

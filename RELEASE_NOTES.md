@@ -195,7 +195,7 @@ conventions:
   `@`; bunny lists apex records under the full domain name.
 - There is **one Value field with no separate Priority / Weight / Port fields**, so
   MX and SRV put the whole record string in Value (`{match}`) — e.g. MX
-  `10 mail.thundermail.com`, SRV `0 1 443 mail.thundermail.com`. The record-list
+  `10 mail.thundermail.com`, SRV `0 0 443 mail.thundermail.com`. The record-list
   screenshot corroborated this (MX displayed as `10 mail.thundermail.com`).
 - The record list's **Weight** column is bunny's A/AAAA load-balancing "Routing
   Weight" (0-100, under Advanced Settings), **not** the SRV weight — so it does not
@@ -424,14 +424,16 @@ What the docs + screenshot establish and we encoded:
   `{srvsubhost}` (blank at the apex).
 - ⚠️ **`Priorität` and `Relative Gewichtung` are dropdowns, not text inputs.** Priority 0 is
   offered (`sehr hoch (0)`), but the **weight dropdown only offers 0/5/10…50**, so
-  Thundermail's `weight: 1` is **unenterable**. This is what prompted the new
-  **`exact_ignore_weight`** match mode on `value_templates.SRV`: priority/port/target still
-  match exactly (the [#10](https://github.com/thunderbird/dns-scripts/issues/10) protection
-  is intact) but any weight passes, since weight only matters between competing targets at
-  the same priority and we publish one target per service. The `metanet-plesk` SRV block
-  therefore emits the literal dropdown entry `niedrig (0)` for the weight instead of
-  `{weight}`. Whether the *published* Thundermail weight should change to `0` is
-  [#14](https://github.com/thunderbird/dns-scripts/issues/14).
+  Thundermail's then-published `weight: 1` was **unenterable**. This is what prompted the
+  ignored-weight match mode on `value_templates.SRV`: port/target still match exactly (the
+  [#10](https://github.com/thunderbird/dns-scripts/issues/10) protection is intact) but any
+  weight passes, since weight only matters between competing targets at the same priority
+  and we publish one target per service. The `metanet-plesk` SRV block emits the literal
+  dropdown entry `niedrig (0)` for the weight instead of `{weight}`. **Resolved 2026-08-13:**
+  the published weight is now `0` too — see
+  [#14](https://github.com/thunderbird/dns-scripts/issues/14) and the
+  [SRV rule change](#srv-checked-relationally--weight-0-lowest-priority-wins-2026-08-13)
+  below.
 - **Weight, Port and Target are three separate fields** (`Relative Gewichtung` / `Zielport`
   / `Zielhost`), so SRV uses the individual tokens like `namecheap`/`hover`, not a packed
   `{value}`.
@@ -504,5 +506,53 @@ MX Record        Host   Mail Server   Priority   [Automatic ▾]
 
 Again pure data, no interpreter change. Verified end-to-end: full suite green,
 `glamrocnamecheap.com` still 13/13 exit 0.
+
+### SRV checked relationally — weight `0`, lowest priority wins (2026-08-13)
+
+Thundermail settled the two questions this repo had open about the SRV records
+([thunderbird-accounts#1163](https://github.com/thunderbird/thunderbird-accounts/issues/1163),
+which answers our [#14](https://github.com/thunderbird/dns-scripts/issues/14)). The
+accounts checker's revised message states the rule verbatim:
+
+> This record conflicts. Give the Thundermail target the highest priority by assigning it
+> the lowest priority number. The weight may be any value your DNS provider supports.
+
+Two changes here:
+
+1. **The published weight is now `0`, not `1`** — the lowest value, and the one that's
+   actually selectable in a constrained panel (METANET's Plesk weight dropdown offers only
+   0/5/10…50, which is what started this). Pure data: `records.json` records go from
+   `0 1 <port> mail.thundermail.com` to `0 0 <port> mail.thundermail.com`, so every
+   provider's fix instructions now print `0`. The published **priority** was already `0`.
+2. **SRV priority is compared against the other answers, not against our number.** The
+   `value_templates.SRV` match mode is renamed `exact_ignore_weight` →
+   **`srv_lowest_priority`**: port and target must still match a whole answer exactly (the
+   [#10](https://github.com/thunderbird/dns-scripts/issues/10) protection), weight is still
+   ignored, and our target now only has to carry a **strictly lower priority number than
+   any other target at that name**.
+
+That second change cuts both ways, which is the point:
+
+- A domain whose records work but sit at, say, priority `10` used to be reported as five
+  SRV failures. It now passes — backwards compatible with every properly configured domain.
+- A domain where our record is **tied with or out-ranked by** a competing target used to
+  *pass* (we only looked for our own answer and ignored the rest). It's now a third status,
+  **`conflict`**: the record is published, but it may not win. This is the edge case the
+  accounts issue calls out as arguably a feature — a zone like that was already misconfigured,
+  and now it's visible.
+
+Interpreter consequences, mirrored in both front-ends as usual: the checker returns a status
+string (`ok` / `missing` / `conflict`) instead of a bool — `check_answers()` / `srv_parts()`
+in `verify_thundermail_dns.py`, `checkAnswers()` / `srvParts()` in `app.js` — and the FAIL
+wording moved into `failure_text()` / `failureText()`. The web app's copied results table
+prints a conflict as its own status word (`**CONFLICT**`) rather than `**FAIL**`, so a reader
+pasting it into an email isn't sent hunting for a record that's already there.
+
+Tests: the parity fixtures now compare the status *and* the wording across Python/JS (a
+conflict that reads one way in the CLI and another in the browser is exactly the drift the
+parity test exists to catch), with cases for tie / out-ranked / alone-at-10 / duplicate copies
+of our own record / unrankable answers, plus a records.json lint asserting the published
+weight is `0`. Full suite green; `glamrocnamecheap.com` still 13/13 exit 0 — it serves
+weight `1`, which the relaxed comparison accepts.
 
 </details>

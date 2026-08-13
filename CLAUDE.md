@@ -51,17 +51,24 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   ("Beispiel: SIP (ohne Unterstrich)"). Like the
   rest of the interpreter, the split is **duplicated in both Python and JS — keep it
   identical.**
-- **SRV weight is deliberately not compared.** `value_templates.SRV.match_mode` is
-  `exact_ignore_weight`, not `exact`: `matches()` compares priority/port/target exactly
-  (preserving the #10 fix) but accepts any weight, because weight only distributes load
-  between competing targets at the same priority and Thundermail publishes one target per
-  service — while Plesk/METANET's weight field is a dropdown in steps of 5, making the
-  canonical `weight: 1` unenterable. `records.json` still *publishes* weight 1 (it's what
-  the fix instructions print for every other provider); only the comparison is relaxed.
-  Whether the published value should become `0` is issue #14. The mode lives in
-  `matches()`/`srv_fields()` in Python and `matches()`/`srvFields()` in JS — **keep the
-  two identical**, and note both front-ends also word the mismatch from a `_VERBS`/`VERBS`
-  table keyed by match mode.
+- **SRV is checked relationally, not against a literal.** `value_templates.SRV.match_mode`
+  is `srv_lowest_priority`: port/target must match exactly (preserving the #10 fix), the
+  **weight is not compared at all**, and the **priority is compared against the other
+  answers at that name instead of against our published number** — our target must carry a
+  strictly *lower* priority number than any competing target. So a working setup at
+  priority 10 passes, while a published-but-tied/out-ranked record is a third status,
+  `conflict` (present, but may not win). This is the decision in
+  [thunderbird-accounts#1163](https://github.com/thunderbird/thunderbird-accounts/issues/1163),
+  which also settled issue #14: the **published weight is now `0`** (the lowest), not `1`
+  — `1` was unenterable in Plesk/METANET's steps-of-5 dropdown, and weight is meaningless
+  with a single target anyway. Consequences to respect: the checker returns a **status
+  string** (`"ok"` / `"missing"` / `"conflict"`), not a bool — `check_answers()`/`srv_parts()`
+  in Python, `checkAnswers()`/`srvParts()` in JS, **keep the two identical** (they even
+  spell the priority test `[0-9]+` rather than `\d+`, since Python's `\d` would also accept
+  non-ASCII digits) — and the FAIL wording comes from `failure_text()`/`failureText()`,
+  which read the `_VERBS`/`VERBS` table plus the `_CONFLICT`/`CONFLICT` sentence. The
+  copied results table (web-only) prints a conflict as its own status word,
+  `**CONFLICT**`, so a reader isn't sent hunting for a missing record.
 - **Interpolation contract (both languages, must match):** substitute `{domain}`
   into every string field first; then `{field}` tokens in templates resolve against
   the concrete record. `re.sub`/`String.replace` use a **function** replacement so
@@ -191,8 +198,9 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   the SRV form **splits Service-Name/Protokoll and wants them without the leading underscore**
   (the reason `{bareservice}`/`{bareprotocol}` exist; its `Domainname` reuses `{srvsubhost}`);
   **`Priorität` and `Relative Gewichtung` are dropdowns**, and the weight one only offers
-  0/5/10…50 so `weight: 1` can't be entered — the SRV block emits the literal `niedrig (0)`
-  and the checker ignores weight (see the `exact_ignore_weight` note above, issues #13/#14);
+  0/5/10…50 — this panel is why the published weight is `0` and why weight isn't compared
+  at all (the SRV block emits the literal dropdown entry `niedrig (0)`; see the
+  `srv_lowest_priority` note above, issues #13/#14 and accounts#1163);
   Weight/Port/Target are three separate fields (`Relative Gewichtung`/`Zielport`/`Zielhost`),
   so SRV uses the individual tokens like namecheap/hover, not `{value}`; targets are stored
   **verbatim with no trailing dot** (Plesk adds the root dot itself — confirmed live, unlike
@@ -247,7 +255,7 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   `{value}   (no trailing dot)`) — that's guidance, not something to paste into a
   panel, so `copyValue()` cuts the string at the first 2+-space run and the cell
   renders the remainder as a muted `.cellhint` span. Keep that spacing convention if
-  you add a hint to a template (single-spaced values like SRV `0 1 443 host` are
+  you add a hint to a template (single-spaced values like SRV `0 0 443 host` are
   untouched, and `tests/test_copy.py` sweeps every provider field to prove no copy
   carries a hint). **(b)** A **blank** value (apex host on
   bunny/cosmotown/ovh/porkbun/metanet-plesk) shows an italic `(leave blank)` and gets

@@ -47,12 +47,18 @@ uv run verify_thundermail_dns.py glamrocnamecheap.com
 ```
 
 Exit status is `0` only when every expected record is present and correct, so it's
-safe to use in scripts or CI. One deliberate exception: **the SRV weight is not
-compared.** Priority, port and target must match exactly, but any weight passes,
-because weight only distributes load between competing targets at the same priority
-and Thundermail publishes a single target per service — while some panels (Plesk /
-METANET) offer only a fixed dropdown of weights in steps of 5, making the documented
-`1` unenterable. See [#14](https://github.com/thunderbird/dns-scripts/issues/14). It queries `1.1.1.1` by default (override with
+safe to use in scripts or CI. **SRV is the one type checked relationally rather than
+against a literal.** Port and target must match exactly, but the **weight is not
+compared at all** (it only distributes load between competing targets at the same
+priority, and Thundermail publishes a single target per service — while some panels,
+e.g. Plesk / METANET, offer only a fixed dropdown of weights in steps of 5), and the
+**priority only has to be a lower number than any other target at that name**. So a
+working setup at priority `10` passes, and a record that's published but *tied with or
+out-ranked by* a competing target is reported as a **conflict** — it exists, but it may
+not win. The recommended values are `priority 0`, `weight 0` (both the lowest). See
+[#14](https://github.com/thunderbird/dns-scripts/issues/14) and
+[thunderbird-accounts#1163](https://github.com/thunderbird/thunderbird-accounts/issues/1163).
+It queries `1.1.1.1` by default (override with
 `--resolver` or the `DNS_RESOLVER` environment variable) to avoid stale local
 caches. The resolver accepts an IP address or a hostname — e.g. point it at an
 authoritative nameserver to bypass public-resolver caching entirely:
@@ -148,8 +154,9 @@ root (never `@`); it splits the SRV label into **Service-Name** and **Protokoll*
 GoDaddy/IONOS/Hover but wants them **without the leading underscore** (`imaps`, `tcp` —
 the `{bareservice}`/`{bareprotocol}` tokens exist for this); **Priorität** and **Relative
 Gewichtung** are dropdowns rather than free text, and the weight dropdown only offers
-0/5/10…50, so Thundermail's weight of `1` cannot be entered (hence the ignored-weight
-matching above, and [#14](https://github.com/thunderbird/dns-scripts/issues/14));
+0/5/10…50 — the recommended weight of `0` is the `niedrig (0)` entry, and any weight
+passes the check anyway (the dropdown is what prompted
+[#14](https://github.com/thunderbird/dns-scripts/issues/14));
 targets are stored **verbatim with no trailing dot** (Plesk adds the root dot itself —
 confirmed live); TXT values are **auto-quoted** by the panel, so they're emitted
 unquoted (like `cosmotown`); and nothing goes live until you click **Aktualisieren**
@@ -184,7 +191,7 @@ Verifying Thundermail DNS for glamrocnamecheap.com (resolver 1.1.1.1)
 MX:
   OK   @                                              10 mail.thundermail.com
 SRV:
-  OK   _jmap._tcp                                     0 1 443 mail.thundermail.com
+  OK   _jmap._tcp                                     0 0 443 mail.thundermail.com
   ...
 
 Result: 13 passed, 0 failed.

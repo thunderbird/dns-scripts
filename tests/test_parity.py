@@ -26,8 +26,14 @@ HARNESS = Path(__file__).parent / "parity" / "run_js.mjs"
 
 
 def python_results() -> dict:
-    match = [v.matches(c["expected"], c["answers"], c["mode"])
-             for c in CASES["matchCases"]]
+    match = []
+    for c in CASES["matchCases"]:
+        status = v.check_answers(c["expected"], c["answers"], c["mode"])
+        # The wording travels with the status: a conflict that reads like a plain
+        # "expected: …" in one front-end and not the other is exactly the drift
+        # this test exists to catch.
+        match.append({"status": status,
+                      "text": v.failure_text(c["mode"], status, c["expected"])})
     resolve = []
     for c in CASES["resolveCases"]:
         ctx = v.resolve_record(c["record"], c["domain"])
@@ -58,9 +64,10 @@ class TestParity(unittest.TestCase):
 
         # Sanity: the fixture's declared verdicts agree with Python's matcher.
         for case, got in zip(CASES["matchCases"], py["match"]):
-            self.assertEqual(got, case["verdict"], case["name"])
+            self.assertEqual(got["status"], case["verdict"], case["name"])
 
-        self.assertEqual(js["match"], py["match"], "matches() diverged")
+        self.assertEqual(js["match"], py["match"],
+                         "check_answers()/failure_text() diverged")
         self.assertEqual(js["resolve"], py["resolve"],
                          "resolve_record/value_of diverged")
 
