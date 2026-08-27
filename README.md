@@ -90,7 +90,7 @@ Pass `--provider` to print, for each **failing** record, exactly what to enter i
 that DNS provider's control panel — including provider-specific quirks such as how
 the Host/Name field is written. Supported: `namecheap`, `squarespace`, `cosmotown`,
 `bunny`, `spaceship`, `godaddy`, `ionos`, `ovh`, `hover`, `digitalocean`, `porkbun`,
-`metanet-plesk`, `generic`. bunny.net's add-record form has a single
+`metanet-plesk`, `cloudflare`, `generic`. bunny.net's add-record form has a single
 **Value** field (no separate Priority/Weight/Port), so the `bunny` MX/SRV output puts
 the whole record string in Value; the Hostname field is left empty for the root
 ([bunny.net: DNS records](https://docs.bunny.net/docs/dns-records)). **`spaceship`
@@ -162,7 +162,23 @@ confirmed live); TXT values are **auto-quoted** by the panel, so they're emitted
 unquoted (like `cosmotown`); and nothing goes live until you click **Aktualisieren**
 (Update) on the pending-changes banner. METANET also sells a paid *Premium Service:
 Individuelle DNS-Einstellungen* where support enters the records for you — the emitted
-headers mention it as a fallback. Note that
+headers mention it as a fallback. **`cloudflare`** covers the Cloudflare dashboard (*your domain → DNS → Records →
+Add record*), whose field labels were read off live add-record dialogs for all four
+types on 2026-08-26
+([Cloudflare: manage DNS records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/)).
+Its quirks: **Name is `@` for the root** (the field literally placeholders as
+“Use @ for root”); the SRV `_service._protocol` label stays **combined** in one Name
+field (Cloudflare appends your domain), with **Priority / Weight / Port / Target as four
+separate boxes**; targets are stored **verbatim with no trailing dot**; and TXT
+**Content must be typed with its surrounding double quotes** — Cloudflare does not add
+them, making `cloudflare` the one provider whose TXT value is emitted quoted (the
+opposite of `cosmotown`/`metanet-plesk`, which auto-quote). The one that bites people:
+the CNAME form defaults **Proxy status** to *Proxied*, which makes Cloudflare answer
+with its own addresses instead of the DKIM target and silently breaks DKIM — so the
+three DKIM CNAMEs must be set to **DNS only**, and the emitted fix carries that as its
+own column. Cloudflare assigns each zone its own nameserver pair, so check
+`dig NS <domain>` before using `--resolver <assigned>.ns.cloudflare.com`. Not yet run
+end-to-end against a Cloudflare-hosted Thundermail zone. Note that
 Cosmotown's customer panel has no SRV section, so the five SRV
 records can't be self-served — the `cosmotown` output routes you to Cosmotown support
 for those. See Cosmotown's docs for

@@ -217,6 +217,29 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   [METANET: Plesk DNS-Verwaltung](https://www.metanet.ch/de/support/dns-nameserver/dns/plesk-dns-verwaltung)
   (German; a Firefox-translated PDF and the SRV screenshot live in the ticket folder
   `THUNDERBIRD_2023/TBPRO/7194_METANET_PLESK/`).
+  `cloudflare` covers the Cloudflare dashboard (*your domain → DNS → Records → Add
+  record*), drafted from live *Add record* screenshots of **all four types** (2026-08-26,
+  ticket folder `THUNDERBIRD_2023/DNS_TOOL_SCREENSHOTS/CLOUDFLARE/`) plus Cloudflare's
+  [manage-DNS-records docs](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/);
+  shipped **without** an `UNVERIFIED —` prefix (all four forms are live-confirmed, the
+  `cosmotown` bar) but **not yet run end-to-end** against a Cloudflare-hosted zone. Single
+  Add-record dialog with a Type dropdown. Apex `Name` is **`@`** (`{host}`), the field's
+  placeholder being "Use @ for root". SRV keeps `_service._protocol` **combined** in one
+  `Name` (Cloudflare appends the zone despite the FQDN-looking `_sip._tcp.example.com`
+  placeholder) but splits **Priority/Weight/Port/Target into four fields** — so it uses the
+  individual tokens like `namecheap`/`hover`, not `{value}`. Targets are stored **verbatim,
+  no trailing dot** (unlike `ovh`/`digitalocean`). Two quirks worth remembering: **(a) TXT
+  `Content` is emitted WITH surrounding double quotes** (`"{value}"`) — Cloudflare stores
+  what you type and does *not* quote for you, making this the **only** provider with a
+  quoted TXT template and the exact inverse of `cosmotown`/`metanet-plesk`; **(b)** the
+  CNAME form defaults **`Proxy status` to Proxied**, which answers with Cloudflare's own
+  addresses and silently breaks DKIM — so the CNAME block warns in its header *and* emits a
+  `Proxy status` = `DNS only` field row. Weight `0` is a plain number input here (no
+  METANET-style dropdown), so `srv_lowest_priority` needs nothing special. Nameservers are
+  **per-zone** (`<name>.ns.cloudflare.com`), so `dig NS <domain>` before picking
+  `--resolver`; verify target `cloudflare.example.com`. Note the layering: `porkbun`'s DNS is
+  Cloudflare-backed and some `cosmotown` nameservers are Cloudflare-fronted, but those
+  panels are their own thing — only this block is the Cloudflare dashboard.
 - **Bookmarkable web URLs (web-only).** `app.js` mirrors the form state (domain /
   provider / resolver / fixformat) into the query string via `history.replaceState`,
   and on load repopulates the fields and auto-runs when a `domain` is present.

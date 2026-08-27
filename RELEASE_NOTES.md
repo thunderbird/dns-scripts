@@ -23,6 +23,7 @@ and the verification bar every provider is held to.
 | `digitalocean`| 2026-07-21 | **Unverified.** From DigitalOcean's help docs + a live SRV Create-a-record screenshot; trailing-dot rule confirmed live on digitalocean.example.com. |
 | `porkbun`     | 2026-07-23 | **Unverified.** From Porkbun's KB add-record (231) + SRV (109) articles; no-trailing-dot confirmed live on porkbun.example.com. |
 | `metanet-plesk`| 2026-07-28 | **Unverified.** METANET's Plesk panel (German UI). From METANET's Plesk DNS docs + a live SRV form screenshot; no-trailing-dot confirmed live on thundermail.metanet.example.com; MX/CNAME labels not screenshotted. |
+| `cloudflare`  | 2026-08-27 | Field labels for all four types read off live *Add record* dialogs (2026-08-26); no-trailing-dot, bare SRV label and manual TXT quoting confirmed on a live zone. Not yet run end-to-end (13/13). |
 
 <details>
 <summary><h2>⚠️ Pending verification</h2></summary>
@@ -467,6 +468,55 @@ outstanding), so fix that record using the emitted `metanet-plesk` SRV instructi
 13/13 with `verify_thundermail_dns.py thundermail.metanet.example.com --resolver ns1.hera.metanet.ch`,
 eyeball the emitted fix strings against the live panel, then drop the `UNVERIFIED` prefixes in
 `records.json` and the notes here and in [`README.md`](README.md).
+
+### `cloudflare` (cloudflare.com)
+
+Added 2026-08-27, tracked in
+[#21](https://github.com/thunderbird/dns-scripts/issues/21). Cloudflare turns up
+constantly — it is also *underneath* two providers we already ship (Porkbun's DNS is
+Cloudflare-backed, and part of Cosmotown's nameserver estate is Cloudflare-fronted) —
+but neither of those is the Cloudflare dashboard, so this is its own block.
+
+Drafted from screenshots of the **live *Add record* dialog for all four types**
+(MX / SRV / TXT / CNAME, captured 2026-08-26) plus Cloudflare's own docs
+([manage DNS records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/),
+[email records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/email-records/),
+[zone apex](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-zone-apex/),
+[subdomain records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-subdomain/)).
+The conventions:
+
+- A **single "Add record" dialog with a Type dropdown** (the
+  `bunny`/`godaddy`/`hover`/`digitalocean`/`porkbun` shape, not per-type sections like
+  Cosmotown), reached at *your domain → DNS → Records → Add record*.
+- **Apex Name is `@`** — the field's placeholder reads *"Use @ for root"* and the
+  zone-apex doc says so explicitly. The `{host}` pattern, not blank `{subhost}`.
+- **SRV keeps `_service._protocol` combined** in one **Name** field (placeholder
+  `_sip._tcp.example.com`, but the bare label is what you type — Cloudflare appends the
+  zone), while **Priority / Weight / Port / Target are four separate fields** — the
+  `namecheap`/`hover`/`metanet-plesk` split, not the packed `{value}` of
+  `squarespace`/`porkbun`.
+- **Weight `0` is enterable** (a plain number input, not METANET's steps-of-5 dropdown),
+  so the weight-`0` decision needs no special handling here. MX **Priority** validates as
+  *"Enter a value of 0 or more"*, so `10` is fine.
+- **Targets are stored verbatim — no trailing dot** (unlike `ovh`/`digitalocean`).
+- **TXT `Content` must include the surrounding double quotes.** Cloudflare stores exactly
+  what you type and does *not* add them, so `cloudflare` is the **only** provider whose
+  TXT template is `"{value}"`; every other provider emits a bare `{value}`. This is the
+  precise opposite of `cosmotown`/`metanet-plesk`, where the panel auto-quotes.
+- 🚨 **The DKIM CNAMEs must be `Proxy status: DNS only`.** The CNAME dialog defaults the
+  toggle to **Proxied** (orange cloud); a proxied CNAME is answered with Cloudflare's own
+  addresses instead of the DKIM target, which silently breaks DKIM. The CNAME block says
+  so in its header *and* carries `Proxy status` as a field row, so the compact table and
+  the per-cell copy both surface it. MX/TXT/SRV have no proxy toggle.
+
+No interpreter change was needed — `{host}`, `{target}`, `{priority}`, `{weight}`,
+`{port}` and `{value}` already covered it; the quoting is literal characters around the
+token.
+
+**Still to do:** run it end-to-end against a Cloudflare-hosted Thundermail zone (13/13).
+Cloudflare assigns a per-zone nameserver pair, so check `dig NS <domain>` first and then
+query authoritatively with `--resolver <assigned>.ns.cloudflare.com`. While you are there,
+confirm that a DKIM CNAME left on **Proxied** does fail the check the way we describe.
 
 ### `namecheap` — panel re-verified, SRV/MX/CNAME changed (2026-08-11)
 

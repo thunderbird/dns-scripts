@@ -239,6 +239,24 @@
         "fields": [["Eintragstyp (Type)", "CNAME"], ["Domainname (Host)", "{subhost}"], ["Kanonischer Name (Target)", "{target}"]]
       }
     },
+    "cloudflare": {
+      "MX": {
+        "header": "Cloudflare dashboard → your domain → DNS → Records → 'Add record' → Type MX. Type @ in Name for the root domain (the field's own placeholder says 'Use @ for root'), put the mail host in 'Mail server' WITHOUT a trailing dot (Cloudflare stores targets verbatim), and leave TTL on Auto. MX records have no proxy toggle. Then click Save:",
+        "fields": [["Type", "MX"], ["Name", "{host}"], ["Mail server", "{target}"], ["Priority", "{priority}"]]
+      },
+      "SRV": {
+        "header": "Cloudflare dashboard → your domain → DNS → Records → 'Add record' → Type SRV. Keep the whole _service._protocol label together in Name and enter it WITHOUT your domain — Cloudflare appends that itself, despite the '_sip._tcp.example.com' placeholder. Priority, Weight, Port and Target are four separate boxes; enter the target WITHOUT a trailing dot. Leave TTL on Auto, then click Save:",
+        "fields": [["Type", "SRV"], ["Name", "{host}"], ["Priority", "{priority}"], ["Weight", "{weight}"], ["Port", "{port}"], ["Target", "{target}"]]
+      },
+      "TXT": {
+        "header": "Cloudflare dashboard → your domain → DNS → Records → 'Add record' → Type TXT. Type @ in Name for the root domain, and enter Content WITH the surrounding double quotes exactly as shown — Cloudflare stores the value as typed and does NOT add the quotes for you. Leave TTL on Auto, then click Save:",
+        "fields": [["Type", "TXT"], ["Name", "{host}"], ["Content", "\"{value}\""]]
+      },
+      "CNAME": {
+        "header": "Cloudflare dashboard → your domain → DNS → Records → 'Add record' → Type CNAME. Enter the DKIM label in Name (Cloudflare appends your domain) and the target WITHOUT a trailing dot. IMPORTANT: set 'Proxy status' to 'DNS only' — click the toggle so the orange cloud turns grey. The form defaults to Proxied, which makes Cloudflare answer with its own addresses instead of the DKIM target and silently breaks DKIM signing. Leave TTL on Auto, then click Save:",
+        "fields": [["Type", "CNAME"], ["Name", "{host}"], ["Target", "{target}"], ["Proxy status", "DNS only"]]
+      }
+    },
     "generic": {
       "MX": {
         "header": "Add this DNS record:",
