@@ -240,6 +240,27 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   `--resolver`; verify target `cloudflare.example.com`. Note the layering: `porkbun`'s DNS is
   Cloudflare-backed and some `cosmotown` nameservers are Cloudflare-fronted, but those
   panels are their own thing — only this block is the Cloudflare dashboard.
+- **BIND zone file export (issue #23).** Both front-ends can print the records as a
+  BIND zone file fragment: `$ORIGIN` + one line per record, **no `SOA`/`NS`/`$TTL`**
+  (the importing zone's default TTL applies). The strings live in the top-level
+  `bind` block of `records.json` (`header`, `all_note`, `failed_note`, per-type
+  `rdata` templates, and `quoted` = the types whose rdata goes through
+  `bind_quote()`/`bindQuote()`: double-quoted, `\`/`"` escaped, split every 255
+  chars). `bind_zone()`/`bindZone()` take the **raw** record list (all, or only the
+  failed ones) and must return **byte-identical** text — `test_parity.py` compares
+  them. Default is **all 13**; the "only failed" variant exists because many panels
+  add imported records as duplicates, and a second SPF TXT breaks SPF (the `all_note`
+  warns about that). CLI: `--bind` prints all 13 and exits **without any DNS lookup**;
+  `--bind-failed-only` runs the check, moves the report to **stderr**, and writes the
+  zone of failed records to stdout (or says "Nothing failed" and writes none), keeping
+  the normal exit status. Web: `bind (zone file)` is an entry in the *Show fixes for*
+  dropdown (value `bind`, appended in `loadConfig()`, **not** a key under `providers`,
+  which all hold field-by-field panel instructions and are linted as such; the URL
+  param validator accepts it explicitly). Picking it shows a `<pre>` preview plus
+  *Copy BIND records* / *Download BIND file* and an *Only failed records* checkbox,
+  even when nothing failed. The download is a `Blob` URL on a throwaway
+  `<a download>` (a navigation, not a fetch), so **no CSP change**. The CLI has no
+  `--provider bind`; it uses the two flags instead.
 - **Bookmarkable web URLs (web-only).** `app.js` mirrors the form state (domain /
   provider / resolver / fixformat) into the query string via `history.replaceState`,
   and on load repopulates the fields and auto-runs when a `domain` is present.

@@ -43,7 +43,14 @@ def python_results() -> dict:
             "qname", "fqdn", "subhost", "service", "protocol",
             "srvhost", "srvsubhost", "bareservice", "bareprotocol",
             "match", "value")})
-    return {"match": match, "resolve": resolve}
+    bind_quote = [v.bind_quote(s) for s in CASES["bindQuoteCases"]]
+    bind_zone = []
+    for c in CASES["bindZoneCases"]:
+        records = (CFG["records"] if c["hosts"] is None
+                   else [r for r in CFG["records"] if r["host"] in c["hosts"]])
+        bind_zone.append(v.bind_zone(CFG, c["domain"], records, c["failedOnly"]))
+    return {"match": match, "resolve": resolve,
+            "bindQuote": bind_quote, "bindZone": bind_zone}
 
 
 @unittest.skipUnless(shutil.which("node"), "node not installed")
@@ -53,6 +60,8 @@ class TestParity(unittest.TestCase):
             "cfg": CFG,
             "matchCases": CASES["matchCases"],
             "resolveCases": CASES["resolveCases"],
+            "bindQuoteCases": CASES["bindQuoteCases"],
+            "bindZoneCases": CASES["bindZoneCases"],
         })
         proc = subprocess.run(
             ["node", str(HARNESS)],
@@ -70,6 +79,8 @@ class TestParity(unittest.TestCase):
                          "check_answers()/failure_text() diverged")
         self.assertEqual(js["resolve"], py["resolve"],
                          "resolve_record/value_of diverged")
+        self.assertEqual(js["bindQuote"], py["bindQuote"], "bind_quote() diverged")
+        self.assertEqual(js["bindZone"], py["bindZone"], "bind_zone() diverged")
 
 
 if __name__ == "__main__":

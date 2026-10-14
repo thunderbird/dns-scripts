@@ -306,5 +306,59 @@ class TestProviderRenderGolden(unittest.TestCase):
         return next(r for r in CFG["records"] if r["type"] == "MX")
 
 
+class TestBindZone(unittest.TestCase):
+    """The BIND export (issue #23). The parse test stands in for `named-checkzone`:
+    dnspython's zone parser reads the fragment (wrapped with a dummy SOA/NS, since
+    the fragment deliberately has neither) and the records must come back intact."""
+
+    def _parse(self, text: str, domain: str):
+        import dns.zone
+        wrapper = (f"$ORIGIN {domain}.\n"
+                   f"@ 3600 IN SOA ns1.{domain}. hostmaster.{domain}. 1 7200 900 1209600 3600\n"
+                   f"@ 3600 IN NS ns1.{domain}.\n")
+        return dns.zone.from_text(wrapper + text, origin=domain + ".", check_origin=True)
+
+    def test_all_records_parse_back(self):
+        zone = self._parse(v.bind_zone(CFG, "example.com", CFG["records"]), "example.com")
+        for rec in CFG["records"]:
+            ctx = build_ctx(rec)
+            rdataset = zone.find_rdataset(rec["host"], rec["type"])
+            got = [r.to_text() for r in rdataset]
+            if rec["type"] == "TXT":
+                self.assertIn(f'"{ctx["value"]}"', got)
+            else:
+                self.assertIn(ctx["match"] + ".", got)
+
+    def test_default_is_every_record_with_duplicate_warning(self):
+        text = v.bind_zone(CFG, "example.com", CFG["records"])
+        body = [ln for ln in text.splitlines() if " IN " in ln]
+        self.assertEqual(len(body), len(CFG["records"]))
+        self.assertIn("WARNING", text)
+        self.assertIn("$ORIGIN example.com.", text)
+        self.assertNotIn("SOA", text)
+
+    def test_failed_only_lists_just_those_records(self):
+        failed = [r for r in CFG["records"] if r["type"] == "CNAME"]
+        text = v.bind_zone(CFG, "example.com", failed, failed_only=True)
+        body = [ln for ln in text.splitlines() if " IN " in ln]
+        self.assertEqual(len(body), 3)
+        self.assertNotIn("WARNING", text)
+        self.assertIn("Only the 3 record(s)", text)
+
+    def test_quote_escapes_and_splits(self):
+        self.assertEqual(v.bind_quote('a"b\\c'), '"a\\"b\\\\c"')
+        self.assertEqual(v.bind_quote(""), '""')
+        self.assertEqual(v.bind_quote("x" * 256), f'"{"x" * 255}" "x"')
+
+    def test_bind_block_covers_every_type(self):
+        types = {r["type"] for r in CFG["records"]}
+        self.assertEqual(set(CFG["bind"]["rdata"]), types)
+        self.assertTrue(set(CFG["bind"]["quoted"]) <= types)
+        for rtype, tpl in CFG["bind"]["rdata"].items():
+            ctx = build_ctx(next(r for r in CFG["records"] if r["type"] == rtype))
+            for tok in TOKEN.findall(tpl):
+                self.assertIn(tok, ctx, f"bind.rdata.{rtype}: unknown token {{{tok}}}")
+
+
 if __name__ == "__main__":
     unittest.main()

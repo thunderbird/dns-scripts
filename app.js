@@ -158,6 +158,45 @@ function renderFix(cfg, provider, ctx) {
   return lines;
 }
 
+// A TXT value as BIND character-strings: double-quoted, with backslash and quote
+// escaped, split into 255-character pieces (the most one string can hold). Our
+// values are ASCII (the domain passed the hostname regex), so characters are bytes.
+// Kept in sync with bind_quote() in verify_thundermail_dns.py.
+function bindQuote(s) {
+  const chunks = [];
+  for (let i = 0; i < s.length; i += 255) chunks.push(s.slice(i, i + 255));
+  if (!chunks.length) chunks.push("");
+  return chunks.map((c) => `"${c.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(" ");
+}
+
+// A BIND zone file fragment (no SOA/NS) holding `records`, built from the `bind`
+// block of records.json (issue #23). `failedOnly` swaps the duplicate-record warning
+// for a note that this is only the failed subset. Kept in sync with bind_zone() in
+// verify_thundermail_dns.py: both must return byte-identical text.
+function bindZone(cfg, domain, records, failedOnly = false) {
+  const bind = cfg.bind;
+  const notes = { domain, count: records.length };
+  const lines = bind.header.map((line) => interpolate(line, notes));
+  for (const line of failedOnly ? bind.failed_note : bind.all_note) {
+    lines.push(interpolate(line, notes));
+  }
+  // No $TTL: the importing zone's default TTL applies.
+  lines.push("", `$ORIGIN ${domain}.`);
+  const rows = records.map((rec) => {
+    const ctx = resolveRecord(rec, domain);
+    ctx.match = valueOf(ctx, cfg, "match");
+    ctx.value = valueOf(ctx, cfg, "value");
+    let rdata = interpolate(bind.rdata[rec.type], ctx);
+    if (bind.quoted.includes(rec.type)) rdata = bindQuote(rdata);
+    return [rec.host, rec.type, rdata];
+  });
+  const width = Math.max(0, ...rows.map(([host]) => host.length));
+  for (const [host, rtype, rdata] of rows) {
+    lines.push(`${host.padEnd(width)}  IN ${rtype.padEnd(5)} ${rdata}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
 // Failing records grouped by type, in record order — the shape both the compact
 // on-screen tables and the copied Markdown tables are built from.
 function groupByType(ctxs) {
@@ -236,6 +275,7 @@ async function query(resolver, name, type) {
 
 const $ = (id) => document.getElementById(id);
 let CFG = null;
+const BIND = "bind"; // the "Show fixes for" value that selects the BIND export
 
 async function loadConfig() {
   const resp = await fetch("records.json");
@@ -247,6 +287,13 @@ async function loadConfig() {
     opt.textContent = name;
     sel.appendChild(opt);
   }
+  // Not a provider panel but an export (issue #23): the records as a BIND zone file,
+  // for panels that import one and for self-hosted DNS. Kept out of
+  // records.json's `providers`, which are all field-by-field panel instructions.
+  const opt = document.createElement("option");
+  opt.value = BIND;
+  opt.textContent = "bind (zone file)";
+  sel.appendChild(opt);
 }
 
 // --- bookmarkable URL state --------------------------------------------------
@@ -260,7 +307,7 @@ function applyStateFromUrl() {
   const domain = params.get("domain");
   if (domain) $("domain").value = domain.trim().replace(/\.$/, "");
   const provider = params.get("provider");
-  if (provider !== null && (provider === "" || provider in CFG.providers)) {
+  if (provider !== null && (provider === "" || provider === BIND || provider in CFG.providers)) {
     $("provider").value = provider;
   }
   const resolver = params.get("resolver");
@@ -408,7 +455,8 @@ async function writeClipboard(text) {
 // section buttons use the default "Copied ✓"/"Copy failed"; per-cell buttons pass
 // the compact glyph pair (opts.ok/opts.fail) since that text doesn't fit in a
 // table column, plus an extra class for styling and an aria-label — "⧉" on its own
-// is not a label.
+// is not a label. `text` may be a function, for text that depends on the form
+// state at click time (the BIND export's "Only failed records" checkbox).
 function copyButton(label, text, opts = {}) {
   const btn = el("button", opts.cls ? `copy ${opts.cls}` : "copy", label);
   btn.type = "button";
@@ -417,7 +465,7 @@ function copyButton(label, text, opts = {}) {
     btn.title = opts.aria;
   }
   btn.addEventListener("click", async () => {
-    const ok = await writeClipboard(text);
+    const ok = await writeClipboard(typeof text === "function" ? text() : text);
     btn.textContent = ok ? (opts.ok ?? "Copied ✓") : (opts.fail ?? "Copy failed");
     btn.classList.toggle("done", ok);
     setTimeout(() => {
@@ -426,6 +474,54 @@ function copyButton(label, text, opts = {}) {
     }, 2000);
   });
   return btn;
+}
+
+// Save `text` as a file. A Blob URL on a throwaway <a download> is a navigation,
+// not a fetch, so the CSP's connect-src doesn't apply and no CSP change is needed.
+function downloadText(filename, text) {
+  const a = el("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+}
+
+// The BIND export (issue #23), shown in place of the fix instructions when
+// "bind (zone file)" is picked in "Show fixes for": a preview of the zone file plus
+// copy and download buttons. All 13 records by default; the checkbox narrows it to
+// the failed ones, and with nothing failed the buttons are disabled and a note says
+// why.
+function bindSection(domain, failedRecords) {
+  const wrap = el("div", "fix");
+  wrap.appendChild(el("p", "fixhdr",
+    "Import this into your DNS provider, or paste it into your zone file:"));
+  const box = el("input");
+  box.type = "checkbox";
+  box.id = "bindfailed";
+  const text = () => box.checked
+    ? bindZone(CFG, domain, failedRecords, true)
+    : bindZone(CFG, domain, CFG.records);
+  const copy = copyButton("Copy BIND records", text);
+  const save = el("button", "copy", "Download BIND file");
+  save.type = "button";
+  save.addEventListener("click", () => downloadText(`${domain}.thundermail.zone`, text()));
+  const label = el("label", "inline");
+  label.htmlFor = "bindfailed";
+  label.append(box, " Only failed records");
+  const note = el("span", "bindnote");
+  const actions = el("div", "actions bind");
+  actions.append(copy, save, label, note);
+  const pre = el("pre", null, text());
+  box.addEventListener("change", () => {
+    const empty = box.checked && !failedRecords.length;
+    copy.disabled = save.disabled = empty;
+    note.textContent = empty ? "Nothing failed: there are no records to export." : "";
+    pre.textContent = empty ? "" : text();
+  });
+  wrap.append(actions, pre);
+  return wrap;
 }
 
 function el(tag, cls, text) {
@@ -461,6 +557,7 @@ async function runCheck(evt) {
   const url = shareUrl(); // captured now, so a later form edit can't skew the copy
   let passed = 0;
   const failures = [];
+  const failedRecords = []; // raw records, for the "Only failed records" BIND export
   const rows = []; // one entry per record, for the copyable results table
   let currentGroup = null;
   let groupEl = null;
@@ -501,6 +598,7 @@ async function runCheck(evt) {
         row.appendChild(el("span", "rval miss",
           `${failureText(mode, status, expected)}  —  got: ${cap(actual) || "(nothing)"}`));
         failures.push(ctx);
+        failedRecords.push(rec);
       }
       groupEl.appendChild(row);
       rows.push({
@@ -517,7 +615,10 @@ async function runCheck(evt) {
     $("resultsactions").appendChild(copyButton(
       "Copy results", resultsMarkdown(domain, resolver, passed, rows, url)));
 
-    if (failures.length && provider) {
+    if (provider === BIND) {
+      $("fixes").appendChild(el("h2", null, `BIND zone file for ${domain}:`));
+      $("fixes").appendChild(bindSection(domain, failedRecords));
+    } else if (failures.length && provider) {
       const format = $("fixformat").value;
       $("fixes").appendChild(
         el("h2", null, `How to fix ${failures.length} record(s) in ${provider}:`));

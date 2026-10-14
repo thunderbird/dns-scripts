@@ -657,6 +657,26 @@
       record / unrankable answers, plus a <code>records.json</code> lint asserting the published weight is
       <code>0</code>. Full suite green; <code>glamrocnamecheap.com</code> still 13/13 exit 0 — it serves
       weight <code>1</code>, which the relaxed comparison accepts.</p>
+
+      <h3 id="bind-export">BIND zone file export (2026-10-13)</h3>
+
+      <p>Both front-ends can now export the Thundermail records as a BIND zone file
+      (<a href="https://github.com/thunderbird/dns-scripts/issues/23">#23</a>). Many DNS panels
+      can import this format, and admins who run their own DNS can paste it into a zone.</p>
+      <ul>
+        <li><strong>CLI:</strong> <code>--bind</code> prints all 13 records and exits. It does no DNS
+          lookups, so it works offline. <code>--bind-failed-only</code> runs the check, writes the report
+          to stderr, and writes only the failed records to stdout.</li>
+        <li><strong>Web:</strong> pick <strong>bind (zone file)</strong> in "Show fixes for". The page
+          shows a preview with <strong>Copy BIND records</strong> and <strong>Download BIND file</strong>
+          buttons, and an <strong>Only failed records</strong> checkbox.</li>
+      </ul>
+      <p>The output is a fragment: <code>$ORIGIN</code> and one line per record, with no
+      <code>SOA</code>, <code>NS</code> or <code>$TTL</code>. All 13 records is the default. The full
+      export starts with a warning, because many panels add imported records as duplicates, and two SPF
+      records make SPF fail. The text comes from a new <code>bind</code> block in
+      <code>records.json</code>, and a parity test makes sure that the CLI and the web app produce
+      byte-identical files.</p>
     </details>
   </main>
 </body>

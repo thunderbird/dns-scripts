@@ -16,6 +16,9 @@ The same checks as the `verify_thundermail_dns.py` CLI below, but from a web
 browser: enter a domain, optionally pick your DNS provider, and get pass/fail per
 record plus exactly what to enter for any that are missing. All lookups run
 client-side via DNS-over-HTTPS (Cloudflare or Google) — no server, nothing stored.
+Pick **bind (zone file)** in "Show fixes for" to get the records as a BIND zone file
+instead, with buttons to copy or download it (see
+[Exporting a BIND zone file](#exporting-a-bind-zone-file)).
 
 Run it locally with any static file server:
 
@@ -198,6 +201,39 @@ For example, a missing DKIM CNAME prints:
       Host:   tm1._domainkey
       Target: tm1.glamrocnamecheap.com.dkim.thunderhosted.com   (no trailing dot)
 ```
+
+### Exporting a BIND zone file
+
+A BIND zone file is the standard text format for DNS records (RFC 1035). Many DNS
+panels can import one, and you can paste it into a self-hosted zone. `--bind`
+prints all 13 Thundermail records in that format and exits. It does no DNS lookups,
+so it works offline:
+
+```sh
+uv run verify_thundermail_dns.py example.com --bind > example.com.thundermail.zone
+```
+
+The output is a fragment, not a full zone: it has `$ORIGIN` but no `SOA`, `NS` or
+`$TTL`, so the importing zone's default TTL applies.
+
+> **Warning:** if the zone already has an MX record or an SPF (`v=spf1`) TXT record,
+> replace it instead of adding a second one. Many panels add imported records as
+> duplicates. Two SPF records make SPF fail, and a second MX record changes where
+> mail goes.
+
+To export only the records that failed the check, use `--bind-failed-only`. It runs
+the normal check first and writes the check report to stderr, so stdout holds only
+the zone file. If nothing failed, it says so and writes no records. The exit status
+is the same as for a normal check.
+
+```sh
+uv run verify_thundermail_dns.py example.com --bind-failed-only > missing.zone
+```
+
+The web version has the same export: pick **bind (zone file)** in "Show fixes for".
+It shows all 13 records with **Copy BIND records** and **Download BIND file**
+buttons, and an **Only failed records** checkbox. The CLI and the web app produce
+byte-identical text.
 
 ### Example
 

@@ -11,6 +11,7 @@ Usage:
     uv run verify_thundermail_dns.py <domain>
     uv run verify_thundermail_dns.py glamrocnamecheap.com
     uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
+    uv run verify_thundermail_dns.py example.com --bind > example.com.thundermail.zone
 
 Exit status is 0 only if every expected record is present and correct. SRV is
 checked relationally rather than against a literal (thunderbird-accounts#1163):
@@ -23,6 +24,10 @@ panel for each FAILING record (accounting for provider quirks such as how the
 Host/Name field is written). The supported providers come from records.json.
 Fixes print as a compact per-type table by default; --fix-format long gives the
 older one-labelled-block-per-record layout.
+
+Pass --bind to print all the records as a BIND zone file fragment (no lookups),
+or --bind-failed-only to run the check and print only the failed records as one
+(the report then goes to stderr, so stdout holds just the zone file).
 
 The record set, value templates, and per-provider remediation strings all live in
 records.json, which is shared verbatim with the browser version (index.html /
@@ -217,6 +222,42 @@ def render_fix_table(cfg: dict, provider: str, rtype: str, ctxs: list[dict]) -> 
     return [block["header"], "", "  " + fmt(labels), *("  " + fmt(r) for r in rows)]
 
 
+def bind_quote(s: str) -> str:
+    """A TXT value as BIND character-strings: double-quoted, with backslash and quote
+    escaped, split into 255-character pieces (the most one string can hold). Our
+    values are ASCII (the domain passed the hostname regex), so characters are bytes.
+    Kept in sync with bindQuote() in app.js."""
+    chunks = [s[i:i + 255] for i in range(0, len(s), 255)] or [""]
+    return " ".join('"' + c.replace("\\", "\\\\").replace('"', '\\"') + '"'
+                    for c in chunks)
+
+
+def bind_zone(cfg: dict, domain: str, records: list[dict], failed_only: bool = False) -> str:
+    """A BIND zone file fragment (no SOA/NS) holding `records`, built from the `bind`
+    block of records.json (issue #23). `failed_only` swaps the duplicate-record
+    warning for a note that this is only the failed subset. Kept in sync with
+    bindZone() in app.js: both must return byte-identical text."""
+    bind = cfg["bind"]
+    notes = {"domain": domain, "count": len(records)}
+    lines = [interpolate(line, notes) for line in bind["header"]]
+    lines += [interpolate(line, notes)
+              for line in bind["failed_note" if failed_only else "all_note"]]
+    # No $TTL: the importing zone's default TTL applies.
+    lines += ["", f"$ORIGIN {domain}."]
+    rows = []
+    for rec in records:
+        ctx = resolve_record(rec, domain)
+        ctx["match"] = value_of(ctx, cfg, "match")
+        ctx["value"] = value_of(ctx, cfg, "value")
+        rdata = interpolate(bind["rdata"][rec["type"]], ctx)
+        if rec["type"] in bind["quoted"]:
+            rdata = bind_quote(rdata)
+        rows.append((rec["host"], rec["type"], rdata))
+    width = max((len(host) for host, _, _ in rows), default=0)
+    lines += [f"{host:<{width}}  IN {rtype:<5} {rdata}" for host, rtype, rdata in rows]
+    return "\n".join(lines) + "\n"
+
+
 def build_resolver(server: str) -> dns.resolver.Resolver:
     """Return a resolver that queries `server` (IP or hostname) explicitly."""
     resolver = dns.resolver.Resolver(configure=False)
@@ -265,6 +306,18 @@ def main() -> int:
         help="layout for --provider fixes: compact 'table' (default) or 'long' "
         "(one labelled block per record)",
     )
+    parser.add_argument(
+        "--bind",
+        action="store_true",
+        help="print all the Thundermail records as a BIND zone file fragment and exit "
+        "(no DNS lookups)",
+    )
+    parser.add_argument(
+        "--bind-failed-only",
+        action="store_true",
+        help="run the check, then print only the FAILED records as a BIND zone file "
+        "fragment on stdout (the check report goes to stderr)",
+    )
     args = parser.parse_args()
 
     domain = args.domain.strip().rstrip(".")
@@ -273,17 +326,29 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
+    if args.bind and not args.bind_failed_only:
+        sys.stdout.write(bind_zone(cfg, domain, cfg["records"]))
+        return 0
+
+    # With --bind-failed-only, stdout carries the zone file, so the report moves to
+    # stderr: `> thundermail.zone` then captures only the records.
+    report = sys.stderr if args.bind_failed_only else sys.stdout
+
+    def say(*parts, **kwargs):
+        print(*parts, file=report, **kwargs)
+
     resolver = build_resolver(args.resolver)
 
-    print(f"Verifying Thundermail DNS for {domain} (resolver {sanitize(args.resolver)})\n")
+    say(f"Verifying Thundermail DNS for {domain} (resolver {sanitize(args.resolver)})\n")
 
     passed = 0
     failures = []
+    failed_records = []  # raw records, for --bind-failed-only
     current_group = None
     for rec in cfg["records"]:
         if rec["type"] != current_group:
             current_group = rec["type"]
-            print(cfg["group_headers"][current_group])
+            say(cfg["group_headers"][current_group])
 
         ctx = resolve_record(rec, domain)
         # Enrich with the derived match/value strings so provider templates can
@@ -296,34 +361,41 @@ def main() -> int:
         mode = cfg["value_templates"][rec["type"]].get("match_mode", "contains")
         status = check_answers(expected, answers, mode)
         if status == "ok":
-            print(f"  {GREEN}OK{RESET}   {label(rec):<46} {shown}")
+            say(f"  {GREEN}OK{RESET}   {label(rec):<46} {shown}")
             passed += 1
         else:
-            print(f"  {RED}FAIL{RESET} {label(rec):<46} "
+            say(f"  {RED}FAIL{RESET} {label(rec):<46} "
                   f"{failure_text(mode, status, expected)}")
-            print(f"       {'':<46} got: {shown or '<empty>'}")
+            say(f"       {'':<46} got: {shown or '<empty>'}")
             failures.append(ctx)
+            failed_records.append(rec)
 
-    print(f"\nResult: {passed} passed, {len(failures)} failed.")
+    say(f"\nResult: {passed} passed, {len(failures)} failed.")
 
     if failures and args.provider:
-        print(f"\n{BOLD}How to fix {len(failures)} record(s) in {args.provider}:{RESET}")
+        say(f"\n{BOLD}How to fix {len(failures)} record(s) in {args.provider}:{RESET}")
         if args.fix_format == "long":
             for ctx in failures:
-                print(f"\n• {ctx['type']} {ctx.get('label', ctx['host'])}")
+                say(f"\n• {ctx['type']} {ctx.get('label', ctx['host'])}")
                 for line in render_fix(cfg, args.provider, ctx):
-                    print(f"  {line}")
+                    say(f"  {line}")
         else:
             groups: dict[str, list[dict]] = {}  # group failures by type, in order
             for ctx in failures:
                 groups.setdefault(ctx["type"], []).append(ctx)
             for rtype, ctxs in groups.items():
-                print()
+                say()
                 for line in render_fix_table(cfg, args.provider, rtype, ctxs):
-                    print(line)
+                    say(line)
     elif failures:
         choices = ", ".join(providers)
-        print(f"\nRe-run with --provider ({choices}) to see exactly what to enter.")
+        say(f"\nRe-run with --provider ({choices}) to see exactly what to enter.")
+
+    if args.bind_failed_only:
+        if failed_records:
+            sys.stdout.write(bind_zone(cfg, domain, failed_records, failed_only=True))
+        else:
+            say("\nNothing failed: there are no records to export.")
 
     return 0 if not failures else 1
 
