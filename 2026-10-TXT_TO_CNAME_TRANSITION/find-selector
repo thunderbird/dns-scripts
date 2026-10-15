@@ -1,0 +1,39 @@
+#!/usr/bin/env fish
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+# Find the DKIM selector for a domain by probing YYYYMMe._domainkey.$domain
+# for every month from 202401 through 202606. The "e" suffix is always used.
+#
+# Usage: find-selector <domain>
+
+if test (count $argv) -ne 1
+    echo "usage: find-selector <domain>" >&2
+    exit 2
+end
+
+set domain $argv[1]
+set found 0
+
+for year in (seq 2024 2026)
+    for month in (seq -w 1 12)
+        set ym $year$month
+        if test $ym -gt 202606
+            break
+        end
+
+        set selector {$ym}e
+        # --short prints only the answer, so empty output means no record.
+        # --search=false keeps resolv.conf search domains from being appended.
+        set answer (doggo --short --search=false $selector._domainkey.$domain TXT)
+        if test -n "$answer"
+            echo "$selector  $answer"
+            set found 1
+        end
+    end
+end
+
+if test $found -eq 0
+    echo "no selector found for $domain in 202401e..202606e" >&2
+    exit 1
+end
