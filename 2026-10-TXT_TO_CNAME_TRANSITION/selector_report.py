@@ -9,7 +9,10 @@
 """Compare expected and actual DKIM selectors for the custom domains (issue #29).
 
 Runs ./find-selector on every line of custom_domains.txt and prints a Markdown
-table: domain | expected selector | actual selector | match. Line N of
+table: domain | expected selector | actual selector | match |
+notify_subscriber. notify_subscriber is ✓ when the selectors do not match and
+find-selector found a selector, so DNS has a DKIM key we did not expect. Those
+domains get a 🔴 marker in the domain column. Line N of
 custom_domains_selectors.txt holds the expected selector for line N of
 custom_domains.txt.
 
@@ -54,14 +57,21 @@ def main():
     if len(domains) != len(expected):
         sys.exit(f"line count mismatch: {len(domains)} domains, {len(expected)} selectors")
 
-    rows = ["| domain | expected selector | actual selector | match |", "|---|---|---|---|"]
+    rows = [
+        "| domain | expected selector | actual selector | match | notify_subscriber |",
+        "|---|---|---|---|---|",
+    ]
     matches = 0
     for domain, line in zip(domains, expected):
         want = expected_selector(line)
         got = actual_selectors(domain)
         ok = want in got if got else want == "none"
         matches += ok
-        rows.append(f"| {domain} | {want} | {', '.join(got) or 'none'} | {'✓' if ok else '✗'} |")
+        notify = not ok and bool(got)
+        rows.append(
+            f"| {'🔴 ' if notify else ''}{domain} | {want} | {', '.join(got) or 'none'} | {'✓' if ok else '✗'} "
+            f"| {'✓' if notify else ''} |"
+        )
         print(f"{domain}: done", file=sys.stderr)
 
     report = "\n".join(rows) + f"\n\n{matches}/{len(domains)} match\n"
