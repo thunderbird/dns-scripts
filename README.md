@@ -133,7 +133,8 @@ with the provider's own documentation. The output for an unverified provider sta
 each block with `UNVERIFIED —`, so compare the field names with your panel. The
 [release notes](RELEASE_NOTES.md) record how each provider was checked.
 
-Provider notes:
+<details>
+<summary>Provider notes</summary>
 
 - `namecheap`: The MX record goes in *Mail Settings → Custom MX*. The SRV form has
   no Host field.
@@ -175,6 +176,8 @@ Provider notes:
   `dig NS <domain>` before you use `--resolver <name>.ns.cloudflare.com`
   ([Cloudflare: create DNS records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/)).
 - `generic`: This prints the full record name and value for any panel.
+
+</details>
 
 ### Exporting a BIND zone file
 
