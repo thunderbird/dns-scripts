@@ -15,6 +15,9 @@ web app), so the two can never drift.
 
 ## Adding or fixing a DNS provider
 
+New to this? Start with the one-page [`ADDING_A_PROVIDER.md`](ADDING_A_PROVIDER.md).
+This section has the details behind it.
+
 A provider is pure data — no code changes. Add a block under `providers` in
 `records.json` and both front-ends pick it up automatically (the CLI `--provider`
 choice and the web "Show fixes for" dropdown). Give it one entry per record type

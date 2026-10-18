@@ -5,8 +5,8 @@
 
 Small utilities for checking DNS records.
 
-Licensed under [MPL-2.0](LICENSE). Contributing (especially **adding a DNS
-provider**)? See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Licensed under [MPL-2.0](LICENSE). Contributing? See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+To add a DNS provider, start with [`ADDING_A_PROVIDER.md`](ADDING_A_PROVIDER.md).
 
 ## Thundermail DNS checker — web version
 
