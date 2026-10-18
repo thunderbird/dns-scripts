@@ -89,105 +89,9 @@ uv run verify_thundermail_dns.py <domain> --resolver kiki.bunny.net
 
 ### Fixing failures
 
-Pass `--provider` to print, for each **failing** record, exactly what to enter in
-that DNS provider's control panel — including provider-specific quirks such as how
-the Host/Name field is written. Supported: `namecheap`, `squarespace`, `cosmotown`,
-`bunny`, `spaceship`, `godaddy`, `ionos`, `ovh`, `hover`, `digitalocean`, `porkbun`,
-`metanet-plesk`, `cloudflare`, `generic`. bunny.net's add-record form has a single
-**Value** field (no separate Priority/Weight/Port), so the `bunny` MX/SRV output puts
-the whole record string in Value; the Hostname field is left empty for the root
-([bunny.net: DNS records](https://docs.bunny.net/docs/dns-records)). **`spaceship`
-is unverified** — its field conventions were inferred from a zone-import screenshot
-and Spaceship's own Spacemail docs (a different record set), not confirmed against
-the live manual add-record form, so its headers flag this and the SRV host handling
-is uncertain (see [`RELEASE_NOTES.md`](RELEASE_NOTES.md)). **`godaddy` is also
-unverified** — its field conventions come from GoDaddy's help docs plus a screenshot
-of the live SRV add-record form, not yet confirmed end-to-end on a live GoDaddy-hosted
-domain, so its headers flag this. GoDaddy is the one panel that splits the SRV
-`_service._protocol` label into separate **Service** and **Protocol** fields
-(the record Name is then `@` for the root). **`ionos` is also unverified** — its
-field conventions come from IONOS's help docs plus a screenshot of the live SRV
-add-record form, not yet confirmed end-to-end on a live IONOS-hosted domain, so its
-headers flag this. IONOS also splits the SRV `_service._protocol` label, but its
-Protocol is a `TCP`/`UDP`/`TLS` dropdown (hard-coded to `TCP`, since every checked
-SRV record is `_tcp`), and its SRV form has both a **Host name** (record location)
-and a separate **Points to** (target). **`ovh` is also unverified** — its field
-conventions come from OVHcloud's help docs plus a screenshot of the live TXT/SPF
-add-entry wizard, not yet confirmed end-to-end (the MX/SRV wizards weren't
-screenshotted), so its headers flag this. OVH's quirks: the **Sub-domain** field is
-left **empty** for the root (not `@`), and FQDN **targets need a trailing dot** (OVH
-appends your domain otherwise), so the `ovh` MX/SRV/CNAME output ends targets with a
-`.`. **`hover` is also unverified** — its SRV field layout comes from a screenshot of
-the live *Edit DNS Record* form, but the MX/TXT/CNAME field labels come from Hover's
-[Managing DNS Records at Hover](https://support.hover.com/support/solutions/articles/) docs
-(not a live add-record screenshot), so its headers flag this. Hover splits the SRV
-`_service._protocol` label into separate **Service** and **Protocol** fields (like GoDaddy/IONOS),
-but its optional **Subdomain** field is left **empty** for the root (not `@` — the `hover`
-SRV output uses a blank subdomain, driven by a `{srvsubhost}` token); MX/TXT use `@` for the
-root. **`digitalocean` is also unverified** — its SRV field layout comes from a screenshot
-of the live *Create a record* dialog, while the MX/TXT/CNAME field labels come from
-DigitalOcean's [Create, Edit, and Delete DNS Records](https://docs.digitalocean.com/products/networking/dns/how-to/manage-records/)
-docs (not a live add-record screenshot), so its headers flag this. DigitalOcean keeps the
-whole SRV `_service._protocol` label in one **Hostname** field (it does *not* split it like
-GoDaddy/IONOS/Hover), uses `@` for the root (MX/TXT), and **appends your domain to any
-target entered without a trailing dot** — so the `digitalocean` MX/SRV/CNAME output ends
-targets with a `.` (like `ovh`). This trailing-dot behaviour is confirmed live on
-`digitalocean.example.com`, whose SRV targets were entered without the dot and came back as
-`mail.thundermail.com.digitalocean.example.com`. **`porkbun` is also unverified** — its MX/TXT/CNAME
-field layout comes from Porkbun's KB article
-[How to Add DNS Records](https://kb.porkbun.com/article/231-how-to-add-dns-records-on-porkbun)
-and its SRV layout from the
-[SRV record guide](https://kb.porkbun.com/article/109-how-to-create-an-srv-record)
-(screenshots, but not confirmed end-to-end on a live panel), so its headers flag this.
-Porkbun (Cloudflare-backed) uses a single Add-record dialog with a Type dropdown: the
-**Host** field is left **blank** for the root (not `@`), MX and SRV have a separate
-**Priority** field, and SRV keeps the whole `_service._protocol` label in one Host with
-Weight/Port/Target packed into the Answer field. Unlike `ovh`/`digitalocean`, targets do
-**not** need a trailing dot — confirmed live on `porkbun.example.com`, whose MX and DKIM CNAME
-targets came back verbatim (Porkbun stores them as entered). **`metanet-plesk` is also
-unverified** — it covers [METANET](https://www.metanet.ch/)'s **Plesk** DNS panel
-(*Websites & Domains → DNS-Einstellungen → Eintrag hinzufügen*), whose SRV field layout
-is confirmed from a screenshot of the live form on a METANET-hosted zone, while the
-German MX/CNAME field labels come from Plesk's docs rather than a live add-record form,
-so its headers flag this
-([METANET: Plesk DNS-Verwaltung](https://www.metanet.ch/de/support/dns-nameserver/dns/plesk-dns-verwaltung)).
-The panel is **German-language**, so the emitted field labels are German with an English
-gloss (`Zielhost (Target host)`). Plesk's quirks: `Domainname` is left **empty** for the
-root (never `@`); it splits the SRV label into **Service-Name** and **Protokoll** like
-GoDaddy/IONOS/Hover but wants them **without the leading underscore** (`imaps`, `tcp` —
-the `{bareservice}`/`{bareprotocol}` tokens exist for this); **Priorität** and **Relative
-Gewichtung** are dropdowns rather than free text, and the weight dropdown only offers
-0/5/10…50 — the recommended weight of `0` is the `niedrig (0)` entry, and any weight
-passes the check anyway (the dropdown is what prompted
-[#14](https://github.com/thunderbird/dns-scripts/issues/14));
-targets are stored **verbatim with no trailing dot** (Plesk adds the root dot itself —
-confirmed live); TXT values are **auto-quoted** by the panel, so they're emitted
-unquoted (like `cosmotown`); and nothing goes live until you click **Aktualisieren**
-(Update) on the pending-changes banner. METANET also sells a paid *Premium Service:
-Individuelle DNS-Einstellungen* where support enters the records for you — the emitted
-headers mention it as a fallback. **`cloudflare`** covers the Cloudflare dashboard (*your domain → DNS → Records →
-Add record*), whose field labels were read off live add-record dialogs for all four
-types on 2026-08-26
-([Cloudflare: manage DNS records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/)).
-Its quirks: **Name is `@` for the root** (the field literally placeholders as
-“Use @ for root”); the SRV `_service._protocol` label stays **combined** in one Name
-field (Cloudflare appends your domain), with **Priority / Weight / Port / Target as four
-separate boxes**; targets are stored **verbatim with no trailing dot**; and TXT
-**Content must be typed with its surrounding double quotes** — Cloudflare does not add
-them, making `cloudflare` the one provider whose TXT value is emitted quoted (the
-opposite of `cosmotown`/`metanet-plesk`, which auto-quote). The one that bites people:
-the CNAME form defaults **Proxy status** to *Proxied*, which makes Cloudflare answer
-with its own addresses instead of the DKIM target and silently breaks DKIM — so the
-three DKIM CNAMEs must be set to **DNS only**, and the emitted fix carries that as its
-own column. Cloudflare assigns each zone its own nameserver pair, so check
-`dig NS <domain>` before using `--resolver <assigned>.ns.cloudflare.com`. Not yet run
-end-to-end against a Cloudflare-hosted Thundermail zone. Note that
-Cosmotown's customer panel has no SRV section, so the five SRV
-records can't be self-served — the `cosmotown` output routes you to Cosmotown support
-for those. See Cosmotown's docs for
-[changing/saving DNS records](https://cosmotown.zendesk.com/hc/en-us/articles/214829926-How-to-change-and-save-your-DNS-Records),
-[adding a host name](https://cosmotown.zendesk.com/hc/en-us/articles/214830006-How-to-add-a-Host-Name-to-your-Domain-name-s-DNS),
-and [updating the MX record](https://cosmotown.zendesk.com/hc/en-us/articles/214830106-How-to-update-the-MX-Record).
+Pass `--provider` to print, for each failing record, what to enter in that DNS
+provider's control panel. The output uses the provider's own field names and
+follows its quirks, for example how to write the root domain in the Host field.
 
 ```sh
 uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
@@ -201,6 +105,76 @@ For example, a missing DKIM CNAME prints:
       Host:   tm1._domainkey
       Target: tm1.glamrocnamecheap.com.dkim.thunderhosted.com   (no trailing dot)
 ```
+
+The table shows the main differences between the supported providers. "Root host"
+is what you put in the Host or Name field for the root domain. "SRV label" tells
+you if the panel keeps `_jmap._tcp` in one field or splits it into Service and
+Protocol fields. "Trailing dot" tells you if targets must end with a `.`.
+
+| `--provider`    | Root host | SRV label                  | Trailing dot | Verified |
+| --------------- | --------- | -------------------------- | ------------ | -------- |
+| `namecheap`     | `@`       | split                      | no           | yes      |
+| `squarespace`   | `@`       | one field                  | no           | yes      |
+| `cosmotown`     | blank     | no SRV form (ask support)  | no           | yes      |
+| `bunny`         | blank     | one field                  | no           | yes      |
+| `spaceship`     | `@`       | one field                  | no           | no       |
+| `godaddy`       | `@`       | split                      | no           | no       |
+| `ionos`         | `@`       | split                      | no           | no       |
+| `ovh`           | blank     | one field                  | yes          | no       |
+| `hover`         | `@`       | split                      | no           | no       |
+| `digitalocean`  | `@`       | one field                  | yes          | no       |
+| `porkbun`       | blank     | one field                  | no           | no       |
+| `metanet-plesk` | blank     | split, no underscore       | no           | TXT only |
+| `cloudflare`    | `@`       | one field                  | no           | yes      |
+| `generic`       | full name | full name                  | no           | n/a      |
+
+"Verified" means that a person compared the field names with the live panel or
+with the provider's own documentation. The output for an unverified provider starts
+each block with `UNVERIFIED —`, so compare the field names with your panel. The
+[release notes](RELEASE_NOTES.md) record how each provider was checked.
+
+Provider notes:
+
+- `namecheap`: The MX record goes in *Mail Settings → Custom MX*. The SRV form has
+  no Host field.
+- `squarespace`: SRV has a separate Priority field. The Data field holds
+  `weight port target` on one line.
+- `cosmotown`: The panel has no SRV section, so you cannot add the five SRV records
+  yourself. The output tells you to ask Cosmotown support. The panel adds quotes to
+  TXT values, so enter them without quotes. See Cosmotown's docs for
+  [changing and saving DNS records](https://cosmotown.zendesk.com/hc/en-us/articles/214829926-How-to-change-and-save-your-DNS-Records),
+  [adding a host name](https://cosmotown.zendesk.com/hc/en-us/articles/214830006-How-to-add-a-Host-Name-to-your-Domain-name-s-DNS),
+  and [updating the MX record](https://cosmotown.zendesk.com/hc/en-us/articles/214830106-How-to-update-the-MX-Record).
+- `bunny`: The form has one Value field and no Priority, Weight or Port fields. For
+  MX and SRV, the whole record goes in Value, for example `10 mail.thundermail.com`
+  ([bunny.net: DNS records](https://docs.bunny.net/docs/dns-records)).
+- `godaddy`, `ionos`, `hover`: The SRV form splits the label into Service (`_jmap`)
+  and Protocol (`_tcp`). IONOS shows Protocol as a dropdown, so pick `TCP`. Hover
+  leaves its Subdomain field blank for the root
+  ([Hover: Managing DNS Records](https://support.hover.com/support/solutions/articles/)).
+- `ovh`, `digitalocean`: If a target has no trailing dot, the panel adds your
+  domain to it. `mail.thundermail.com` then becomes
+  `mail.thundermail.com.example.com`. The output adds the dot for you
+  ([DigitalOcean: manage DNS records](https://docs.digitalocean.com/products/networking/dns/how-to/manage-records/)).
+- `porkbun`: MX and SRV have a separate Priority field. The SRV Answer field holds
+  `weight port target` on one line
+  ([Porkbun: add DNS records](https://kb.porkbun.com/article/231-how-to-add-dns-records-on-porkbun),
+  [Porkbun: SRV records](https://kb.porkbun.com/article/109-how-to-create-an-srv-record)).
+- `metanet-plesk`: This is [METANET](https://www.metanet.ch/)'s Plesk panel, in
+  German. The output shows the German field names with an English translation,
+  for example `Zielhost (Target host)`. Enter the SRV service and protocol without
+  the underscore (`imaps`, `tcp`). Weight is a dropdown, so pick `niedrig (0)`
+  ([#14](https://github.com/thunderbird/dns-scripts/issues/14)). The panel adds
+  quotes to TXT values, so enter them without quotes. Nothing goes live until you
+  click **Aktualisieren** (Update). METANET also sells a paid service where support
+  enters the records for you
+  ([METANET: Plesk DNS-Verwaltung](https://www.metanet.ch/de/support/dns-nameserver/dns/plesk-dns-verwaltung)).
+- `cloudflare`: Enter TXT values with the double quotes, because Cloudflare does
+  not add them. Set **Proxy status** to *DNS only* on the three DKIM CNAMEs. The
+  default, *Proxied*, breaks DKIM. Each zone has its own nameservers, so run
+  `dig NS <domain>` before you use `--resolver <name>.ns.cloudflare.com`
+  ([Cloudflare: create DNS records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/)).
+- `generic`: This prints the full record name and value for any panel.
 
 ### Exporting a BIND zone file
 
