@@ -396,11 +396,43 @@ async function detect(resolver, domain) {
 
 // The one-line provider summary shown above the results and in "Copy results".
 function providerLine(result) {
-  if (!result.nameservers.length) return "DNS provider: unknown (no NS records found)";
+  const summary = `DNS provider: ${providerSummary(result)}`;
+  if (!result.nameservers.length) return summary;
+  const hosts = result.nameservers.map((ns) => clean(ns.host)).join(", ");
+  return `${summary} (nameservers: ${hosts})`;
+}
+
+// --- provider.html (issue #32): quick provider lookup, no Thundermail check ---
+// Pure builders, kept here (not in provider.js) so the copy harness can test them.
+
+// The headline: "Namecheap", "Namecheap + GoDaddy", "Namecheap + unknown", "unknown".
+function providerSummary(result) {
+  if (!result.nameservers.length) return "unknown (no NS records found)";
   let names = result.providers.map((p) => p.name).join(" + ") || "unknown";
   if (result.providers.length && result.unknown) names += " + unknown";
-  const hosts = result.nameservers.map((ns) => clean(ns.host)).join(", ");
-  return `DNS provider: ${names} (nameservers: ${hosts})`;
+  return names;
+}
+
+// Provider name per nameserver, "(unknown)" if it matched nothing.
+function nameserverRows(result) {
+  const names = Object.fromEntries(result.providers.map((p) => [p.key, p.name]));
+  return result.nameservers.map((ns) => [ns.host, ns.key ? names[ns.key] : "(unknown)"]);
+}
+
+// "Copy result" text. fixUrl is the full-check link (or "" if there are no fix steps
+// for the provider); url is the bookmarkable link to this lookup.
+function providerMarkdown(domain, zone, result, fixUrl, url) {
+  const out = [`**DNS provider — ${domain}**`, "", `DNS provider: ${providerSummary(result)}`];
+  if (zone && zone !== domain) out.push(`Zone: ${zone}`);
+  const rows = nameserverRows(result);
+  if (rows.length) {
+    out.push("", mdRow(["Nameserver", "Provider"]), mdRow(["---", "---"]));
+    for (const [host, name] of rows) out.push(mdRow([mdCell(host), mdCell(name)]));
+  }
+  out.push("");
+  if (fixUrl) out.push(`Check the Thundermail records with fix steps: ${fixUrl}`);
+  out.push(`Re-check: ${url}`);
+  return out.join("\n");
 }
 
 // --- UI -----------------------------------------------------------------------
@@ -839,7 +871,9 @@ async function runCheck(evt) {
   }
 }
 
-loadConfig().then(() => {
+// provider.html (issue #32) also loads this file for the shared functions, but it
+// has no "Show fixes for" select and wires itself up in provider.js.
+if ($("provider")) loadConfig().then(() => {
   $("form").addEventListener("submit", runCheck);
   // Once the user picks a provider, it is their choice, not a detected one.
   $("provider").addEventListener("change", () => delete $("provider").dataset.auto);

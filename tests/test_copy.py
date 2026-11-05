@@ -30,6 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 CFG = json.loads((ROOT / "records.json").read_text())
+NS_TABLE = json.loads((ROOT / "nameservers.json").read_text())["providers"]
 HARNESS = Path(__file__).parent / "copy" / "run_js.mjs"
 
 SITE = "https://thunderbird.github.io/dns-scripts/"
@@ -78,6 +79,20 @@ COPY_VALUE_CASES = [
 
 SRV_NOTE = " (any weight, lowest priority number)"
 
+# provider.html "Copy result" (issue #32).
+PROVIDER_PAGE = f"{SITE}provider.html"
+PROVIDER_CASES = [
+    {"domain": "example.com", "zone": "example.com",
+     "hosts": ["dns2.registrar-servers.com", "dns1.registrar-servers.com"],
+     "fixUrl": f"{SITE}index.html?domain=example.com&provider=namecheap",
+     "url": f"{PROVIDER_PAGE}?domain=example.com"},
+    {"domain": "mail.example.org", "zone": "example.org",
+     "hosts": ["ns-1.awsdns-01.com", "ns1.a|b.example.net"],
+     "fixUrl": "", "url": f"{PROVIDER_PAGE}?domain=mail.example.org"},
+    {"domain": "example.net", "zone": None, "hosts": [],
+     "fixUrl": "", "url": f"{PROVIDER_PAGE}?domain=example.net"},
+]
+
 PROVIDER_TEXT = ("DNS provider: Porkbun (nameservers: curitiba.ns.porkbun.com, "
                  "fortaleza.ns.porkbun.com)")
 
@@ -124,6 +139,8 @@ def run_harness() -> dict:
                         "passed": 2, "rows": RESULTS_ROWS, "url": LINK,
                         "providerText": PROVIDER_TEXT},
         "fixCases": FIX_CASES,
+        "nsTable": NS_TABLE,
+        "providerCases": PROVIDER_CASES,
     })
     proc = subprocess.run(["node", str(HARNESS)], input=payload,
                           capture_output=True, text=True, timeout=30)
@@ -222,6 +239,40 @@ class TestCopyText(unittest.TestCase):
         self.assertEqual(lines[4], PROVIDER_TEXT)
         self.assertEqual(lines[5], "")
         self.assertEqual(lines[6], "| Status | Record | Expected | Found |")
+
+    # --- provider.html copy (#32) --------------------------------------------
+
+    def test_provider_markdown_known(self):
+        out = self.out["providers"][0]
+        self.assertEqual(out["summary"], "Namecheap")
+        self.assertEqual(out["markdown"].splitlines(), [
+            "**DNS provider — example.com**",
+            "",
+            "DNS provider: Namecheap",
+            "",
+            "| Nameserver | Provider |",
+            "| --- | --- |",
+            "| dns1.registrar-servers.com | Namecheap |",
+            "| dns2.registrar-servers.com | Namecheap |",
+            "",
+            "Check the Thundermail records with fix steps: "
+            f"{SITE}index.html?domain=example.com&provider=namecheap",
+            f"Re-check: {PROVIDER_PAGE}?domain=example.com",
+        ])
+
+    def test_provider_markdown_mixed_and_zone(self):
+        out = self.out["providers"][1]
+        self.assertEqual(out["summary"], "AWS Route 53 + unknown")
+        lines = out["markdown"].splitlines()
+        self.assertIn("Zone: example.org", lines)            # walked up from mail.
+        self.assertIn("| ns1.a\\|b.example.net | (unknown) |", lines)  # pipe escaped
+        self.assertFalse(any(l.startswith("Check the Thundermail") for l in lines))
+        self.assertEqual(lines[-1], f"Re-check: {PROVIDER_PAGE}?domain=mail.example.org")
+
+    def test_provider_markdown_no_nameservers(self):
+        out = self.out["providers"][2]
+        self.assertEqual(out["summary"], "unknown (no NS records found)")
+        self.assertNotIn("| Nameserver", out["markdown"])
 
     # --- fix copy (#15) ------------------------------------------------------
 

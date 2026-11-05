@@ -647,4 +647,16 @@ end of the hostname. If the domain has no NS records, the lookup walks up to the
 parent zone. A parity test makes sure that the CLI and the web app give the same
 result, and a lint test makes sure that every provider with fix steps can be detected.
 
+### Quick DNS provider lookup page (2026-11-05)
+
+A new page, [`provider.html`](https://thunderbird.github.io/dns-scripts/provider.html),
+finds the DNS provider of a domain without the Thundermail check
+([#32](https://github.com/thunderbird/dns-scripts/issues/32)). It does only the NS
+lookup and shows the provider, the zone, and each nameserver. If there are fix steps
+for the provider, it links to the full check with that provider selected. If not, it
+links to a pre-filled GitHub issue. **Copy result** puts the result on the clipboard
+as Markdown, and `provider.html?domain=example.com` runs the lookup when the page
+opens. The checker page links to it. The page reuses the detection code in `app.js`,
+so the parity tests cover it.
+
 </details>

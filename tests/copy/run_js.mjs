@@ -55,7 +55,7 @@ vm.runInContext(`${appSrc}\nglobalThis.__copy = { mdCell, copyValue };`, sandbox
                 { filename: "app.js" });
 
 const { resolveRecord, interpolate, publicHeader, resultsMarkdown, fixesMarkdown,
-        shareUrl } = sandbox;
+        shareUrl, detectProvider, providerSummary, providerMarkdown } = sandbox;
 const { mdCell, copyValue } = sandbox.__copy;
 const valueOf = sandbox.valueOf; // own global prop shadows Object.prototype.valueOf
 
@@ -95,6 +95,15 @@ const out = {
   resultsWithProvider: resultsMarkdown(
     spec.resultsCase.domain, spec.resultsCase.resolver, spec.resultsCase.passed,
     spec.resultsCase.rows, spec.resultsCase.url, spec.resultsCase.providerText),
+  // provider.html's "Copy result" (issue #32), from nameservers fed through the
+  // real detectProvider() and nameservers.json.
+  providers: spec.providerCases.map((c) => {
+    const result = detectProvider(c.hosts, spec.nsTable);
+    return {
+      summary: providerSummary(result),
+      markdown: providerMarkdown(c.domain, c.zone, result, c.fixUrl, c.url),
+    };
+  }),
   fixes: spec.fixCases.map((c) => fixesMarkdown(
     cfg, c.provider, c.domain,
     c.records.map(([host, type]) => ctxFor(host, type, c.domain)),

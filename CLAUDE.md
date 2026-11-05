@@ -305,6 +305,21 @@ domain's DNS from its NS records: `dns_provider.py` (CLI) and the same logic in
   `tests/test_dns_provider.py` requires every `records.json` provider except
   `generic` to be reachable through some entry's `fixes` — so **a new provider also
   needs a `nameservers.json` entry**.
+- **Quick provider page `provider.html` (issue #32, web-only).** A separate page
+  (Roland's call, not a mode of `index.html` — no `mode` URL parameter) that runs only
+  the NS lookup. It loads **`app.js` then `provider.js`**: classic scripts share the
+  global lexical scope, so `provider.js` reuses `detect()`/`fixesFor()`/`wantsIssue()`/
+  `issueText()`/`copyButton()`/`clean()` and assigns `NS_TABLE` directly. `app.js`'s
+  trailing `loadConfig()` is guarded by `if ($("provider"))` (the checker's select,
+  absent on `provider.html`) — the Node harnesses still pass because their
+  `getElementById` stub always returns an object. The pure "Copy result" builders
+  (`providerSummary`, `nameserverRows`, `providerMarkdown`) live in **`app.js`** so
+  `tests/copy/run_js.mjs` can test them; `provider.js` holds only DOM wiring. Its URL
+  state is `domain` + non-default `resolver`, validated like the checker's. The page
+  copies `index.html`'s CSP `<meta>` (connect-src `'self'` covers `nameservers.json`).
+  A fix-steps link opens `index.html?domain=…&provider=…`; the GitHub-issue link is the
+  same as on the checker. Keep its styles in its own inline `<style>` (no shared CSS
+  file today).
 - **Bookmarkable web URLs (web-only).** `app.js` mirrors the form state (domain /
   provider / resolver / fixformat) into the query string via `history.replaceState`,
   and on load repopulates the fields and auto-runs when a `domain` is present.

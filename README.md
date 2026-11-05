@@ -261,6 +261,12 @@ If there are no fix steps for the provider, the report ends with a link to a
 pre-filled GitHub issue that requests them. The issue lists the nameservers, never
 the domain, because GitHub issues are public.
 
+The web version is a separate page,
+**<https://thunderbird.github.io/dns-scripts/provider.html>**. It does only the NS
+lookup, not the Thundermail check, and shows the same result. A **Copy result** button
+puts it on the clipboard as Markdown. A link such as `provider.html?domain=example.com`
+runs the lookup when the page opens.
+
 `--quiet` prints only the provider key (`namecheap`), one line per provider, or
 `unknown`. `--resolver` works as for the checker. The exit status is `0` if a
 nameserver matches a known provider, `1` if none match, and `2` for an invalid domain.
