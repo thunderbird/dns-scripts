@@ -322,6 +322,43 @@ function fixesFor(result) {
   return provs.length === 1 && !result.unknown ? provs[0].fixes : null;
 }
 
+// Why fixesFor() returned null: the reason shown when the page falls back to
+// the generic fix steps.
+function fallbackReason(result) {
+  const provs = result.providers;
+  if (!result.nameservers.length) return "no NS records found";
+  if (!provs.length) return "the nameservers are not in nameservers.json";
+  if (provs.length > 1 || result.unknown) return "the nameservers belong to more than one provider";
+  return `there are no fix steps for ${provs[0].name} yet`;
+}
+
+// Where to request fix steps for a provider we do not know.
+const ISSUE_URL = "https://github.com/thunderbird/dns-scripts/issues/new";
+const HOWTO_URL = "https://github.com/thunderbird/dns-scripts/blob/main/ADDING_A_PROVIDER.md";
+
+// True when it is worth asking for a new provider: the nameservers are not in
+// nameservers.json, or they all belong to one provider without fix steps. Not for
+// a mix of providers (a provider move), and not when no NS records were found.
+function wantsIssue(result) {
+  const provs = result.providers;
+  if (!result.nameservers.length || fixesFor(result)) return false;
+  return !provs.length || (provs.length === 1 && !result.unknown);
+}
+
+// Title and body for the pre-filled "request this provider" issue. It never
+// contains the domain: GitHub issues are public.
+function issueText(result) {
+  const provs = result.providers;
+  const name = provs.length ? provs[0].name : result.nameservers[0].host;
+  const hosts = result.nameservers.map((ns) => `- ${ns.host}`).join("\n");
+  const body = `Nameservers:\n${hosts}\n\n` +
+    "Please add fix steps for this DNS provider. If you can, attach screenshots " +
+    "of the add-record form for MX, SRV, TXT and CNAME. See " +
+    `${HOWTO_URL}\n\n` +
+    "Do not write your domain name here: GitHub issues are public.";
+  return { title: `DNS provider request: ${name}`, body };
+}
+
 // --- DNS query (the one genuinely platform-specific piece: DoH here) ----------
 
 async function query(resolver, name, type) {
@@ -680,15 +717,21 @@ async function runCheck(evt) {
   try {
     // Find the DNS provider from the nameservers (issue #31). If the user did not
     // pick a provider, select the detected one in "Show fixes for".
+    // If it has no fix steps for the provider, fall back to generic and offer a
+    // pre-filled GitHub issue to request them.
     let providerText = "";
     let detected = false;
+    let fallback = "";
+    let issue = null;
     try {
       const [, result] = await detect(resolver, domain);
       providerText = providerLine(result);
       const fixes = fixesFor(result);
-      if (!provider && fixes) {
-        provider = fixes;
+      if (wantsIssue(result)) issue = issueText(result);
+      if (!provider) {
+        provider = fixes ?? "generic";
         detected = true;
+        if (!fixes) fallback = fallbackReason(result);
       }
     } catch (e) {
       providerText = `DNS provider: unknown (lookup error: ${e.message})`;
@@ -702,6 +745,14 @@ async function runCheck(evt) {
       delete sel.dataset.auto;
     }
     $("dnsprovider").textContent = providerText;
+    if (issue) {
+      const a = el("a", null, "file a GitHub issue");
+      a.href = `${ISSUE_URL}?${new URLSearchParams(issue)}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      $("dnsprovider").append(el("br"),
+        "There are no fix steps for this provider yet. To request them, ", a, ".");
+    }
 
     for (const rec of CFG.records) {
       if (rec.type !== currentGroup) {
@@ -762,7 +813,8 @@ async function runCheck(evt) {
       const format = $("fixformat").value;
       $("fixes").appendChild(
         el("h2", null, `How to fix ${failures.length} record(s) in ${provider}` +
-          `${detected ? " (detected from the nameservers)" : ""}:`));
+          (fallback ? `, because ${fallback}:`
+            : detected ? " (detected from the nameservers):" : ":")));
       $("fixes").appendChild(el("div", "actions")).appendChild(copyButton(
         "Copy fix instructions",
         fixesMarkdown(CFG, provider, domain, failures, format, url)));

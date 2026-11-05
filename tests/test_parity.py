@@ -54,7 +54,10 @@ def python_results() -> dict:
     nameservers = []
     for c in CASES["nameserverCases"]:
         result = dp.detect_provider(c["hosts"], NS_TABLE)
-        nameservers.append({"result": result, "fixes": dp.fixes_for(result)})
+        wants = dp.wants_issue(result)
+        nameservers.append({"result": result, "fixes": dp.fixes_for(result),
+                            "reason": dp.fallback_reason(result), "wantsIssue": wants,
+                            "issue": dp.issue_text(result) if wants else None})
     zones = [dp.zone_candidates(d) for d in CASES["zoneCandidateCases"]]
     return {"match": match, "resolve": resolve,
             "bindQuote": bind_quote, "bindZone": bind_zone,
@@ -89,6 +92,7 @@ class TestParity(unittest.TestCase):
             self.assertEqual([p["key"] for p in got["result"]["providers"]],
                              case["expectKeys"], case["name"])
             self.assertEqual(got["fixes"], case["expectFixes"], case["name"])
+            self.assertEqual(got["wantsIssue"], case["expectIssue"], case["name"])
 
         self.assertEqual(js["match"], py["match"],
                          "check_answers()/failure_text() diverged")
@@ -97,7 +101,7 @@ class TestParity(unittest.TestCase):
         self.assertEqual(js["bindQuote"], py["bindQuote"], "bind_quote() diverged")
         self.assertEqual(js["bindZone"], py["bindZone"], "bind_zone() diverged")
         self.assertEqual(js["nameservers"], py["nameservers"],
-                         "detect_provider()/fixes_for() diverged")
+                         "detect_provider()/fixes_for()/fallback_reason()/wants_issue()/issue_text() diverged")
         self.assertEqual(js["zones"], py["zones"], "zone_candidates() diverged")
 
 

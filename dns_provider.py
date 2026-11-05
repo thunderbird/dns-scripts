@@ -30,6 +30,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.parse
 from pathlib import Path
 
 import dns.exception
@@ -39,6 +40,10 @@ import dns.resolver
 from verify_thundermail_dns import build_resolver, sanitize, valid_domain
 
 NAMESERVERS_PATH = Path(__file__).parent / "nameservers.json"
+
+# Where to request fix steps for a provider we do not know (kept in sync with app.js).
+ISSUE_URL = "https://github.com/thunderbird/dns-scripts/issues/new"
+HOWTO_URL = "https://github.com/thunderbird/dns-scripts/blob/main/ADDING_A_PROVIDER.md"
 
 
 def load_table() -> list[dict]:
@@ -118,6 +123,36 @@ def fallback_reason(result: dict) -> str:
     return f"there are no fix steps for {provs[0]['name']} yet"
 
 
+def wants_issue(result: dict) -> bool:
+    """True when it is worth asking for a new provider: the nameservers are not in
+    nameservers.json, or they all belong to one provider without fix steps. Not for
+    a mix of providers (a provider move), and not when no NS records were found.
+    Kept in sync with wantsIssue() in app.js."""
+    provs = result["providers"]
+    if not result["nameservers"] or fixes_for(result):
+        return False
+    return not provs or (len(provs) == 1 and not result["unknown"])
+
+
+def issue_text(result: dict) -> dict:
+    """Title and body for the pre-filled "request this provider" issue. It never
+    contains the domain: GitHub issues are public. Kept in sync with issueText()
+    in app.js."""
+    provs = result["providers"]
+    name = provs[0]["name"] if provs else result["nameservers"][0]["host"]
+    hosts = "\n".join(f"- {ns['host']}" for ns in result["nameservers"])
+    body = (f"Nameservers:\n{hosts}\n\n"
+            "Please add fix steps for this DNS provider. If you can, attach screenshots "
+            "of the add-record form for MX, SRV, TXT and CNAME. See "
+            f"{HOWTO_URL}\n\n"
+            "Do not write your domain name here: GitHub issues are public.")
+    return {"title": f"DNS provider request: {name}", "body": body}
+
+
+def issue_url(result: dict) -> str:
+    return ISSUE_URL + "?" + urllib.parse.urlencode(issue_text(result))
+
+
 def ns_lookup(resolver: dns.resolver.Resolver, name: str) -> list[str] | None:
     """NS hostnames AT `name` (not via a CNAME), or None if there are none."""
     try:
@@ -163,6 +198,9 @@ def report(domain: str, zone: str | None, result: dict, table: list[dict]) -> li
     fixes = fixes_for(result)
     if fixes:
         lines.append(f"Fix steps: uv run verify_thundermail_dns.py {domain} --provider {fixes}")
+    if wants_issue(result):
+        lines.append("There are no fix steps for this provider yet. To request them, "
+                     f"file a GitHub issue: {issue_url(result)}")
     if result["unknown"]:
         lines.append("To recognize an unknown nameserver, add its suffix to nameservers.json.")
     return lines

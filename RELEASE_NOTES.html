@@ -689,7 +689,11 @@
           provider, or the <code>generic</code> steps with one line that says why.</li>
         <li><strong>Web:</strong> "Show fixes for" now starts at <strong>Auto-detect</strong>. The page
           shows the DNS provider above the results and selects its fix steps, unless you picked a provider
-          yourself. "Copy results" includes the provider line.</li>
+          yourself. If there are no fix steps for the provider, the page shows the <code>generic</code>
+          steps. "Copy results" includes the provider line.</li>
+        <li><strong>Request a provider:</strong> if the provider is unknown, or has no fix steps, both
+          front-ends offer a link to a pre-filled GitHub issue. The issue lists the nameservers but not the
+          domain, because GitHub issues are public.</li>
       </ul>
       <p>The map from nameserver suffix to provider is in a new file, <code>nameservers.json</code>, so
       <code>records.json</code> stays Thundermail-specific. A suffix matches whole labels at the end of the

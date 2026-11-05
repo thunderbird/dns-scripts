@@ -18,7 +18,9 @@ record plus exactly what to enter for any that are missing. All lookups run
 client-side via DNS-over-HTTPS (Cloudflare or Google) — no server, nothing stored.
 "Show fixes for" starts at **Auto-detect**: the page finds the DNS provider from the
 domain's nameservers and shows its fix steps (see
-[Finding the DNS provider](#finding-the-dns-provider)).
+[Finding the DNS provider](#finding-the-dns-provider)). If there are no fix steps
+for that provider, the page shows the `generic` steps and a link to file a GitHub
+issue that requests the provider.
 Pick **bind (zone file)** in "Show fixes for" to get the records as a BIND zone file
 instead, with buttons to copy or download it (see
 [Exporting a BIND zone file](#exporting-a-bind-zone-file)).
@@ -102,7 +104,8 @@ uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
 
 If you do not know the provider, use `--provider auto`. The checker finds it from
 the domain's nameservers. If the provider has no fix steps, or the nameservers are
-unknown, it uses `generic` and prints one line that says why.
+unknown, it uses `generic`, prints one line that says why, and prints a link to file
+a GitHub issue that requests the provider.
 
 For example, a missing DKIM CNAME prints:
 
@@ -253,6 +256,10 @@ Nameservers:
   dns2.registrar-servers.com  Namecheap
 Fix steps: uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
 ```
+
+If there are no fix steps for the provider, the report ends with a link to a
+pre-filled GitHub issue that requests them. The issue lists the nameservers, never
+the domain, because GitHub issues are public.
 
 `--quiet` prints only the provider key (`namecheap`), one line per provider, or
 `unknown`. `--resolver` works as for the checker. The exit status is `0` if a

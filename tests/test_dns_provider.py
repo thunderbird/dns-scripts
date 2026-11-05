@@ -124,6 +124,19 @@ class TestReport(unittest.TestCase):
         self.assertIn("To recognize an unknown nameserver, add its suffix to nameservers.json.",
                       lines)
 
+    def test_provider_without_fix_steps_offers_an_issue(self):
+        lines = self.report("example.com", "example.com", ["ns-1.awsdns-01.com"])
+        issue = [line for line in lines if "file a GitHub issue" in line]
+        self.assertEqual(len(issue), 1)
+        url = issue[0].split(": ", 1)[1]
+        self.assertTrue(url.startswith(dp.ISSUE_URL + "?title=DNS+provider+request%3A+AWS+Route+53"))
+        # The pre-filled issue is public, so it must never carry the domain.
+        self.assertNotIn("example.com", url)
+
+    def test_known_provider_offers_no_issue(self):
+        lines = self.report("example.com", "example.com", ["ns01.domaincontrol.com"])
+        self.assertFalse(any("GitHub issue" in line for line in lines))
+
     def test_no_nameservers(self):
         self.assertEqual(self.report("example.com", None, []),
                          ["DNS provider for example.com: unknown (no NS records found)"])

@@ -295,7 +295,11 @@ def auto_provider(domain: str, resolver: dns.resolver.Resolver, say) -> str:
         say(f"DNS provider: {names} (from the nameservers), showing fixes for {fixes}\n")
         return fixes
     say(f"DNS provider: {names}. Showing generic fixes, because "
-        f"{dns_provider.fallback_reason(result)}.\n")
+        f"{dns_provider.fallback_reason(result)}.")
+    if dns_provider.wants_issue(result):
+        say("To request fix steps for this provider, file a GitHub issue: "
+            f"{dns_provider.issue_url(result)}")
+    say()
     return "generic"
 
 

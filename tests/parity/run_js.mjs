@@ -11,7 +11,7 @@
 // so that promise never resolves and its DOM-touching callback never fires; the
 // function declarations we need (checkAnswers / failureText / interpolate /
 // resolveRecord / valueOf / bindQuote / bindZone / detectProvider / fixesFor /
-// zoneCandidates)
+// zoneCandidates / fallbackReason / wantsIssue / issueText)
 // are left on the sandbox global, closures over the top-level consts intact.
 
 import fs from "node:fs";
@@ -43,7 +43,8 @@ vm.createContext(sandbox);
 vm.runInContext(appSrc, sandbox, { filename: "app.js" });
 
 const { checkAnswers, failureText, interpolate, resolveRecord, bindQuote, bindZone,
-        detectProvider, fixesFor, zoneCandidates } = sandbox;
+        detectProvider, fixesFor, zoneCandidates, fallbackReason, wantsIssue,
+        issueText } = sandbox;
 const valueOf = sandbox.valueOf; // own global prop shadows Object.prototype.valueOf
 
 const { cfg, matchCases, resolveCases, bindQuoteCases, bindZoneCases,
@@ -84,7 +85,11 @@ for (const c of bindZoneCases) {
 
 for (const c of nameserverCases) {
   const result = detectProvider(c.hosts, nsTable);
-  out.nameservers.push({ result, fixes: fixesFor(result) });
+  const wants = wantsIssue(result);
+  out.nameservers.push({
+    result, fixes: fixesFor(result), reason: fallbackReason(result), wantsIssue: wants,
+    issue: wants ? issueText(result) : null,
+  });
 }
 
 for (const d of zoneCandidateCases) out.zones.push(zoneCandidates(d));

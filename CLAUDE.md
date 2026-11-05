@@ -288,12 +288,20 @@ domain's DNS from its NS records: `dns_provider.py` (CLI) and the same logic in
   `auto_provider()` to avoid an import cycle); the checker's `--provider auto` (not
   the default, so normal output is byte-identical; falls back to `generic` with one
   line from `fallback_reason()`); and the web page, where "Show fixes for" starts at
-  **Auto-detect**: the detected provider is selected and marked in
+  **Auto-detect**: the detected provider — or **`generic`** when there is no fix
+  block (Roland's call; the `<h2>` then says why via `fallbackReason()`) — is selected and marked in
   `select.dataset.auto`, which keeps it **out of the URL** (`autoProvider()` in
   `stateParams()`) and makes the next check detect again; a user `change` event
   clears the mark, so a manual pick always wins. `nameservers.json` loads from the
   same origin (`connect-src 'self'`), so **no CSP change**; if it fails to load, the
-  check still runs and detection finds nothing. A lint in
+  check still runs and detection finds nothing (a DoH *error* does not fall back to
+  generic). **Provider-request issue:** `wants_issue()`/`wantsIssue()` (unknown
+  nameservers, or one provider without `fixes`; not a mix, not "no NS") makes both
+  front-ends offer a pre-filled `issues/new` link from `issue_text()`/`issueText()`
+  (parity-tested); its title/body carry the provider name or first nameserver and the
+  nameserver list but **never the domain** — that would put a customer domain in a
+  public issue. The web link is an `<a target=_blank>` (navigation, no CSP change); the
+  CLI prints the full URL (`urlencode`, not byte-compared with `URLSearchParams`). A lint in
   `tests/test_dns_provider.py` requires every `records.json` provider except
   `generic` to be reachable through some entry's `fixes` — so **a new provider also
   needs a `nameservers.json` entry**.

@@ -635,7 +635,11 @@ Both front-ends can now find the DNS provider from the domain's nameservers
   or the `generic` steps with one line that says why.
 - **Web:** "Show fixes for" now starts at **Auto-detect**. The page shows the DNS
   provider above the results and selects its fix steps, unless you picked a
-  provider yourself. "Copy results" includes the provider line.
+  provider yourself. If there are no fix steps for the provider, the page shows the
+  `generic` steps. "Copy results" includes the provider line.
+- **Request a provider:** if the provider is unknown, or has no fix steps, both
+  front-ends offer a link to a pre-filled GitHub issue. The issue lists the
+  nameservers but not the domain, because GitHub issues are public.
 
 The map from nameserver suffix to provider is in a new file, `nameservers.json`,
 so `records.json` stays Thundermail-specific. A suffix matches whole labels at the
