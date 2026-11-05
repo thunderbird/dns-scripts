@@ -624,4 +624,23 @@ because many panels add imported records as duplicates, and two SPF records make
 SPF fail. The text comes from a new `bind` block in `records.json`, and a parity
 test makes sure that the CLI and the web app produce byte-identical files.
 
+### Find the DNS provider of a domain (2026-11-05)
+
+Both front-ends can now find the DNS provider from the domain's nameservers
+([#31](https://github.com/thunderbird/dns-scripts/issues/31)).
+
+- **CLI:** a new script, `uv run dns_provider.py <domain>`, prints the provider and
+  each nameserver. `--quiet` prints only the provider key, for scripts. The checker
+  also accepts `--provider auto`. It shows the fix steps for the detected provider,
+  or the `generic` steps with one line that says why.
+- **Web:** "Show fixes for" now starts at **Auto-detect**. The page shows the DNS
+  provider above the results and selects its fix steps, unless you picked a
+  provider yourself. "Copy results" includes the provider line.
+
+The map from nameserver suffix to provider is in a new file, `nameservers.json`,
+so `records.json` stays Thundermail-specific. A suffix matches whole labels at the
+end of the hostname. If the domain has no NS records, the lookup walks up to the
+parent zone. A parity test makes sure that the CLI and the web app give the same
+result, and a lint test makes sure that every provider with fix steps can be detected.
+
 </details>

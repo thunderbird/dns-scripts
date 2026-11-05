@@ -35,7 +35,8 @@ const sandbox = {
   fetch: () => new Promise(noop),
   document: {
     // The form inputs stateParams() reads; anything else gets an empty value.
-    getElementById: (id) => ({ ...domNode, value: spec.form[id] ?? "" }),
+    // `dataset` is empty: no provider was auto-detected (issue #31).
+    getElementById: (id) => ({ ...domNode, value: spec.form[id] ?? "", dataset: {} }),
     createElement: () => domNode,
   },
   history: { replaceState: noop },
@@ -90,6 +91,10 @@ const out = {
   results: resultsMarkdown(
     spec.resultsCase.domain, spec.resultsCase.resolver, spec.resultsCase.passed,
     spec.resultsCase.rows, spec.resultsCase.url),
+  // The same, with the detected-provider line (issue #31).
+  resultsWithProvider: resultsMarkdown(
+    spec.resultsCase.domain, spec.resultsCase.resolver, spec.resultsCase.passed,
+    spec.resultsCase.rows, spec.resultsCase.url, spec.resultsCase.providerText),
   fixes: spec.fixCases.map((c) => fixesMarkdown(
     cfg, c.provider, c.domain,
     c.records.map(([host, type]) => ctxFor(host, type, c.domain)),

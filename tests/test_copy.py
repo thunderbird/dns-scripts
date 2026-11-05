@@ -78,6 +78,9 @@ COPY_VALUE_CASES = [
 
 SRV_NOTE = " (any weight, lowest priority number)"
 
+PROVIDER_TEXT = ("DNS provider: Porkbun (nameservers: curitiba.ns.porkbun.com, "
+                 "fortaleza.ns.porkbun.com)")
+
 RESULTS_ROWS = [
     {"ok": False, "status": "missing", "record": "MX @",
      "expected": "10 mail.thundermail.com", "found": "(nothing)"},
@@ -118,7 +121,8 @@ def run_harness() -> dict:
         "fieldCopyCases": [[p, t, "example.com"] for p, block in CFG["providers"].items()
                            for t in block],
         "resultsCase": {"domain": "example.com", "resolver": "cloudflare",
-                        "passed": 2, "rows": RESULTS_ROWS, "url": LINK},
+                        "passed": 2, "rows": RESULTS_ROWS, "url": LINK,
+                        "providerText": PROVIDER_TEXT},
         "fixCases": FIX_CASES,
     })
     proc = subprocess.run(["node", str(HARNESS)], input=payload,
@@ -209,6 +213,15 @@ class TestCopyText(unittest.TestCase):
         # One row per record, plus header + separator.
         self.assertEqual(len([l for l in lines if l.startswith("|")]),
                          len(RESULTS_ROWS) + 2)
+
+    def test_results_markdown_provider_line(self):
+        # Issue #31: the detected provider sits between the summary and the table.
+        # Without it (the default) the copy has no provider line at all.
+        self.assertNotIn("DNS provider", self.out["results"])
+        lines = self.out["resultsWithProvider"].splitlines()
+        self.assertEqual(lines[4], PROVIDER_TEXT)
+        self.assertEqual(lines[5], "")
+        self.assertEqual(lines[6], "| Status | Record | Expected | Found |")
 
     # --- fix copy (#15) ------------------------------------------------------
 

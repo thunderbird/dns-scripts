@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared fixtures exercised by BOTH the Python suite (tests/test_parity.py) and the Node harness (tests/parity/run_js.mjs). JSON has no comment syntax, so this key documents intent. matchCases feed check_answers()/checkAnswers() plus the failure wording (verdict is the status: ok / missing / conflict); resolveCases feed resolve_record/resolveRecord + value_of/valueOf. bindQuoteCases feed bind_quote()/bindQuote(); bindZoneCases feed bind_zone()/bindZone() (hosts null = every record, else the records whose host is listed, all types).",
+  "_comment": "Shared fixtures exercised by BOTH the Python suite (tests/test_parity.py) and the Node harness (tests/parity/run_js.mjs). JSON has no comment syntax, so this key documents intent. matchCases feed check_answers()/checkAnswers() plus the failure wording (verdict is the status: ok / missing / conflict); resolveCases feed resolve_record/resolveRecord + value_of/valueOf. bindQuoteCases feed bind_quote()/bindQuote(); bindZoneCases feed bind_zone()/bindZone() (hosts null = every record, else the records whose host is listed, all types). nameserverCases feed detect_provider()+fixes_for() / detectProvider()+fixesFor() against nameservers.json (expectKeys = detected provider keys in order, expectFixes = the records.json block or null); zoneCandidateCases feed zone_candidates()/zoneCandidates() (issue #31).",
   "matchCases": [
     {"name": "exact rejects appended target (#10)", "expected": "0 0 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com.example.com"], "mode": "exact", "verdict": "missing"},
     {"name": "exact accepts correct target", "expected": "0 0 443 mail.thundermail.com", "answers": ["0 0 443 mail.thundermail.com"], "mode": "exact", "verdict": "ok"},
@@ -35,5 +35,21 @@
     {"name": "SRV non-apex (exercises srvhost/srvsubhost rest label)", "domain": "example.com", "record": {"type": "SRV", "host": "_sip._tcp.pbx", "priority": 5, "weight": 10, "port": 5060, "target": "sip.example.net"}}
   ],
   "bindQuoteCases": ["v=spf1 include:spf.thundermail.com -all", "", "say \"hi\" \\ bye", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"z\"", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-  "bindZoneCases": [{"name": "all 13 records", "domain": "example.com", "hosts": null, "failedOnly": false}, {"name": "failed subset", "domain": "sub.example.org", "hosts": ["@", "_imaps._tcp", "tm2._domainkey"], "failedOnly": true}, {"name": "nothing failed", "domain": "example.net", "hosts": [], "failedOnly": true}]
+  "bindZoneCases": [{"name": "all 13 records", "domain": "example.com", "hosts": null, "failedOnly": false}, {"name": "failed subset", "domain": "sub.example.org", "hosts": ["@", "_imaps._tcp", "tm2._domainkey"], "failedOnly": true}, {"name": "nothing failed", "domain": "example.net", "hosts": [], "failedOnly": true}],
+  "nameserverCases": [
+    {"name": "namecheap pair", "hosts": ["dns2.registrar-servers.com", "dns1.registrar-servers.com"], "expectKeys": ["namecheap"], "expectFixes": "namecheap"},
+    {"name": "case and trailing dot are ignored", "hosts": ["DNS1.Registrar-Servers.COM."], "expectKeys": ["namecheap"], "expectFixes": "namecheap"},
+    {"name": "suffix must be label-aligned", "hosts": ["ns1.xregistrar-servers.com"], "expectKeys": [], "expectFixes": null},
+    {"name": "host equal to the suffix matches", "hosts": ["registrar-servers.com"], "expectKeys": ["namecheap"], "expectFixes": "namecheap"},
+    {"name": "suffix longer than host never matches", "hosts": ["cloudflare.com"], "expectKeys": [], "expectFixes": null},
+    {"name": "multi-label suffix", "hosts": ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"], "expectKeys": ["cloudflare"], "expectFixes": "cloudflare"},
+    {"name": "glob label, provider without fix block", "hosts": ["ns-1982.awsdns-55.co.uk", "ns-199.awsdns-24.com"], "expectKeys": ["route53"], "expectFixes": null},
+    {"name": "glob needs its fixed head", "hosts": ["ns1.awsdns.com"], "expectKeys": [], "expectFixes": null},
+    {"name": "provider move: two providers", "hosts": ["dns1.registrar-servers.com", "ns01.domaincontrol.com"], "expectKeys": ["namecheap", "godaddy"], "expectFixes": null},
+    {"name": "one unknown nameserver blocks the fixes", "hosts": ["dns1.registrar-servers.com", "ns1.example.net"], "expectKeys": ["namecheap"], "expectFixes": null},
+    {"name": "delegated subdomain zone (METANET)", "hosts": ["ns1.hera.metanet.ch", "ns2.hera.metanet.ch"], "expectKeys": ["metanet-plesk"], "expectFixes": "metanet-plesk"},
+    {"name": "two suffixes of one provider", "hosts": ["dns200.anycast.me", "ns104.ovh.net"], "expectKeys": ["ovh"], "expectFixes": "ovh"},
+    {"name": "no nameservers", "hosts": [], "expectKeys": [], "expectFixes": null}
+  ],
+  "zoneCandidateCases": ["mail.example.com", "example.com", "a.b.example.co.uk", "Example.COM.", "com"]
 }

@@ -17,6 +17,10 @@ front-ends over one data file**:
 The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submission),
 4 TXT (SPF / MTA-STS / TLSRPT / DMARC), 3 DKIM CNAMEs.
 
+A second tool, **DNS provider detection** (issue #31), finds which provider hosts a
+domain's DNS from its NS records: `dns_provider.py` (CLI) and the same logic in
+`app.js`, both reading `nameservers.json`. See the bullet in the architecture section.
+
 ## Core architecture & crucial decisions
 
 - **Single source of truth = `records.json`.** It holds the record set,
@@ -261,6 +265,38 @@ The checked set is 13 records: 1 MX, 5 SRV (jmap/caldavs/carddavs/imaps/submissi
   even when nothing failed. The download is a `Blob` URL on a throwaway
   `<a download>` (a navigation, not a fetch), so **no CSP change**. The CLI has no
   `--provider bind`; it uses the two flags instead.
+- **DNS provider detection (issue #31) — data in `nameservers.json`, NOT
+  `records.json`.** `records.json` stays Thundermail-specific (Roland's call), so the
+  nameserver-suffix → provider map is its own file. Each entry: `key` (what
+  `dns_provider.py --quiet` prints), `name`, `suffixes`, optional `fixes` (a
+  `records.json` provider key — the link to the fix steps) and optional `verified`
+  (suffix seen on a live zone; informational only). Matching is **label-aligned
+  suffix matching** (not the prototype's substring test), with at most one `*` per
+  label for families like `awsdns-*.co.uk`; first entry wins. The pure functions
+  `zone_candidates`/`match_nameserver`/`detect_provider`/`fixes_for` in
+  `dns_provider.py` and `zoneCandidates`/`matchNameserver`/`detectProvider`/`fixesFor`
+  in `app.js` are **duplicated — keep them identical** (`test_parity.py` compares
+  them via `nameserverCases`/`zoneCandidateCases`). `fixes_for` returns a block only
+  when **all** nameservers belong to **one** provider that has `fixes`; a mix (a
+  provider move) or any unknown nameserver returns none. The zone walk tries the name,
+  then each parent, never the TLD, and ignores NS answers reached through a CNAME
+  (Python: `canonical_name`; JS: the answer's owner `name`). The prototype's HTTP
+  redirect fallback was dropped on purpose: a browser can't do it (CORS + CSP) and it
+  contacts a host the domain owner controls. Front-ends: `dns_provider.py` (report,
+  `--quiet`, `--resolver`; exit 0 known / 1 unknown / 2 invalid; imports helpers from
+  `verify_thundermail_dns.py`, which in turn imports `dns_provider` **lazily** inside
+  `auto_provider()` to avoid an import cycle); the checker's `--provider auto` (not
+  the default, so normal output is byte-identical; falls back to `generic` with one
+  line from `fallback_reason()`); and the web page, where "Show fixes for" starts at
+  **Auto-detect**: the detected provider is selected and marked in
+  `select.dataset.auto`, which keeps it **out of the URL** (`autoProvider()` in
+  `stateParams()`) and makes the next check detect again; a user `change` event
+  clears the mark, so a manual pick always wins. `nameservers.json` loads from the
+  same origin (`connect-src 'self'`), so **no CSP change**; if it fails to load, the
+  check still runs and detection finds nothing. A lint in
+  `tests/test_dns_provider.py` requires every `records.json` provider except
+  `generic` to be reachable through some entry's `fixes` — so **a new provider also
+  needs a `nameservers.json` entry**.
 - **Bookmarkable web URLs (web-only).** `app.js` mirrors the form state (domain /
   provider / resolver / fixformat) into the query string via `history.replaceState`,
   and on load repopulates the fields and auto-runs when a `domain` is present.
@@ -354,6 +390,11 @@ uv run verify_thundermail_dns.py <domain>
 uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
 uv run verify_thundermail_dns.py <domain> --resolver dns1.registrar-servers.com
 
+# DNS provider of a domain
+uv run dns_provider.py glamrocnamecheap.com           # report
+uv run dns_provider.py glamrocnamecheap.com --quiet   # just the key
+uv run verify_thundermail_dns.py <domain> --provider auto
+
 # Web (static — any file server)
 python3 -m http.server 8000               # then open http://localhost:8000/
 ```
@@ -375,7 +416,9 @@ Exit status is `0` only when all 13 records are present and correct.
   you change the interpreter in one language, update the other or this test fails.
   Add a fixture case whenever you add an interpreter token or `match_mode`.
   `test_copy.py` covers the web-only clipboard text (see the copy-button bullet
-  below). ⚠️ **Harness fragility (by design):** both Node harnesses rely on
+  below). `test_dns_provider.py` lints `nameservers.json` and covers the CLI-only
+  parts of provider detection (zone walk with a fake lookup, report, fallback reason).
+  ⚠️ **Harness fragility (by design):** both Node harnesses rely on
   `app.js`'s *only* top-level side effect being the trailing
   `loadConfig().then(...)`, which they neutralize by stubbing `fetch` to stay
   pending (so the DOM-touching callback never fires). If you add **new top-level
@@ -404,7 +447,7 @@ Exit status is `0` only when all 13 records are present and correct.
 - **Copy buttons:** the text builders are covered by `test_copy.py` + its own Node
   harness `tests/copy/run_js.mjs` (same sandbox trick as the parity one, but it also
   needs `URL` and a real `location.href` for `shareUrl()`, and form fields with
-  values for `stateParams()`). One wrinkle: only `function` declarations land on the
+  values and an empty `dataset` for `stateParams()`, which asks `autoProvider()`). One wrinkle: only `function` declarations land on the
   vm's global — `const` arrows like `mdCell` don't, so the harness appends a
   `globalThis.__copy = { mdCell, copyValue }` epilogue to the *same* script rather than
   adding test hooks to `app.js`. The per-cell buttons (#17) are covered the same way —

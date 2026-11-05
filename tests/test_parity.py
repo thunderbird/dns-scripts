@@ -17,10 +17,12 @@ import subprocess
 import unittest
 from pathlib import Path
 
+import dns_provider as dp
 import verify_thundermail_dns as v
 
 ROOT = Path(__file__).parent.parent
 CFG = json.loads((ROOT / "records.json").read_text())
+NS_TABLE = json.loads((ROOT / "nameservers.json").read_text())["providers"]
 CASES = json.loads((Path(__file__).parent / "fixtures" / "parity_cases.json").read_text())
 HARNESS = Path(__file__).parent / "parity" / "run_js.mjs"
 
@@ -49,8 +51,14 @@ def python_results() -> dict:
         records = (CFG["records"] if c["hosts"] is None
                    else [r for r in CFG["records"] if r["host"] in c["hosts"]])
         bind_zone.append(v.bind_zone(CFG, c["domain"], records, c["failedOnly"]))
+    nameservers = []
+    for c in CASES["nameserverCases"]:
+        result = dp.detect_provider(c["hosts"], NS_TABLE)
+        nameservers.append({"result": result, "fixes": dp.fixes_for(result)})
+    zones = [dp.zone_candidates(d) for d in CASES["zoneCandidateCases"]]
     return {"match": match, "resolve": resolve,
-            "bindQuote": bind_quote, "bindZone": bind_zone}
+            "bindQuote": bind_quote, "bindZone": bind_zone,
+            "nameservers": nameservers, "zones": zones}
 
 
 @unittest.skipUnless(shutil.which("node"), "node not installed")
@@ -62,6 +70,9 @@ class TestParity(unittest.TestCase):
             "resolveCases": CASES["resolveCases"],
             "bindQuoteCases": CASES["bindQuoteCases"],
             "bindZoneCases": CASES["bindZoneCases"],
+            "nsTable": NS_TABLE,
+            "nameserverCases": CASES["nameserverCases"],
+            "zoneCandidateCases": CASES["zoneCandidateCases"],
         })
         proc = subprocess.run(
             ["node", str(HARNESS)],
@@ -74,6 +85,10 @@ class TestParity(unittest.TestCase):
         # Sanity: the fixture's declared verdicts agree with Python's matcher.
         for case, got in zip(CASES["matchCases"], py["match"]):
             self.assertEqual(got["status"], case["verdict"], case["name"])
+        for case, got in zip(CASES["nameserverCases"], py["nameservers"]):
+            self.assertEqual([p["key"] for p in got["result"]["providers"]],
+                             case["expectKeys"], case["name"])
+            self.assertEqual(got["fixes"], case["expectFixes"], case["name"])
 
         self.assertEqual(js["match"], py["match"],
                          "check_answers()/failure_text() diverged")
@@ -81,6 +96,9 @@ class TestParity(unittest.TestCase):
                          "resolve_record/value_of diverged")
         self.assertEqual(js["bindQuote"], py["bindQuote"], "bind_quote() diverged")
         self.assertEqual(js["bindZone"], py["bindZone"], "bind_zone() diverged")
+        self.assertEqual(js["nameservers"], py["nameservers"],
+                         "detect_provider()/fixes_for() diverged")
+        self.assertEqual(js["zones"], py["zones"], "zone_candidates() diverged")
 
 
 if __name__ == "__main__":

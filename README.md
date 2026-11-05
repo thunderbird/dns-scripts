@@ -16,6 +16,9 @@ The same checks as the `verify_thundermail_dns.py` CLI below, but from a web
 browser: enter a domain, optionally pick your DNS provider, and get pass/fail per
 record plus exactly what to enter for any that are missing. All lookups run
 client-side via DNS-over-HTTPS (Cloudflare or Google) — no server, nothing stored.
+"Show fixes for" starts at **Auto-detect**: the page finds the DNS provider from the
+domain's nameservers and shows its fix steps (see
+[Finding the DNS provider](#finding-the-dns-provider)).
 Pick **bind (zone file)** in "Show fixes for" to get the records as a BIND zone file
 instead, with buttons to copy or download it (see
 [Exporting a BIND zone file](#exporting-a-bind-zone-file)).
@@ -96,6 +99,10 @@ follows its quirks, for example how to write the root domain in the Host field.
 ```sh
 uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
 ```
+
+If you do not know the provider, use `--provider auto`. The checker finds it from
+the domain's nameservers. If the provider has no fix steps, or the nameservers are
+unknown, it uses `generic` and prints one line that says why.
 
 For example, a missing DKIM CNAME prints:
 
@@ -225,3 +232,33 @@ SRV:
 
 Result: 13 passed, 0 failed.
 ```
+
+## dns_provider.py
+
+### Finding the DNS provider
+
+Finds the DNS provider of a domain: the company that hosts its DNS records, which is
+often not the registrar. It looks up the NS records and matches each nameserver
+against the suffixes in [`nameservers.json`](nameservers.json). If the domain has no
+NS records (for example `mail.example.com`), it walks up to the parent zone.
+
+```sh
+uv run dns_provider.py glamrocnamecheap.com
+```
+
+```
+DNS provider for glamrocnamecheap.com: Namecheap
+Nameservers:
+  dns1.registrar-servers.com  Namecheap
+  dns2.registrar-servers.com  Namecheap
+Fix steps: uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
+```
+
+`--quiet` prints only the provider key (`namecheap`), one line per provider, or
+`unknown`. `--resolver` works as for the checker. The exit status is `0` if a
+nameserver matches a known provider, `1` if none match, and `2` for an invalid domain.
+
+To recognize a new provider, add an entry to `nameservers.json`: a `key`, a `name`,
+its nameserver `suffixes`, and `fixes` if `records.json` has fix steps for it. A
+suffix matches whole labels at the end of the hostname, and one `*` in a label matches
+any characters (`awsdns-*.com`). The web app reads the same file.

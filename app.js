@@ -32,7 +32,7 @@ const cap = (s) => (s.length <= MAX_VALUE ? s : s.slice(0, MAX_VALUE) + "…");
 
 // Numeric DNS type codes, to keep only answers of the requested type (a DoH
 // response can also carry CNAMEs from a resolution chain).
-const TYPE_NUM = { A: 1, CNAME: 5, MX: 15, TXT: 16, SRV: 33 };
+const TYPE_NUM = { A: 1, NS: 2, CNAME: 5, MX: 15, TXT: 16, SRV: 33 };
 
 const RESOLVERS = {
   cloudflare: {
@@ -258,6 +258,70 @@ function fixCell(label, value) {
   return td;
 }
 
+// --- DNS provider detection (issue #31; mirrors dns_provider.py) --------------
+// The nameserver -> provider map lives in nameservers.json, not records.json,
+// which stays Thundermail-specific. These four functions must stay identical to
+// their Python twins: tests/test_parity.py compares the results.
+
+// The names to try for NS records, most specific first, stopping above the TLD:
+// mail.example.com -> [mail.example.com, example.com].
+function zoneCandidates(domain) {
+  const labels = domain.toLowerCase().replace(/\.$/, "").split(".");
+  const out = [];
+  for (let i = 0; i < labels.length - 1; i++) out.push(labels.slice(i).join("."));
+  return out;
+}
+
+// One DNS label against one suffix label; a single "*" matches any run.
+function labelMatches(label, pattern) {
+  const star = pattern.indexOf("*");
+  if (star === -1) return label === pattern;
+  const head = pattern.slice(0, star);
+  const tail = pattern.slice(star + 1);
+  return label.length >= head.length + tail.length &&
+    label.startsWith(head) && label.endsWith(tail);
+}
+
+// The first table entry with a suffix that matches the END of `host`, label by
+// label, or null. Label-aligned, so "ovh.net" never matches "xovh.net".
+function matchNameserver(host, table) {
+  const labels = host.toLowerCase().replace(/\.$/, "").split(".");
+  for (const entry of table) {
+    for (const suffix of entry.suffixes) {
+      const pats = suffix.split(".");
+      if (pats.length <= labels.length &&
+          pats.every((p, i) => labelMatches(labels[labels.length - pats.length + i], p))) {
+        return entry;
+      }
+    }
+  }
+  return null;
+}
+
+// Every nameserver (sorted) with its provider key or null, the distinct providers
+// in first-seen order, and whether any nameserver was unknown.
+function detectProvider(hosts, table) {
+  const nameservers = [];
+  const providers = [];
+  const seen = new Set();
+  for (const host of [...hosts].sort()) {
+    const entry = matchNameserver(host, table);
+    nameservers.push({ host, key: entry ? entry.key : null });
+    if (entry && !seen.has(entry.key)) {
+      seen.add(entry.key);
+      providers.push({ key: entry.key, name: entry.name, fixes: entry.fixes ?? null });
+    }
+  }
+  return { nameservers, providers, unknown: nameservers.some((ns) => ns.key === null) };
+}
+
+// The records.json provider block to show: only when all the nameservers belong
+// to ONE known provider that has a block.
+function fixesFor(result) {
+  const provs = result.providers;
+  return provs.length === 1 && !result.unknown ? provs[0].fixes : null;
+}
+
 // --- DNS query (the one genuinely platform-specific piece: DoH here) ----------
 
 async function query(resolver, name, type) {
@@ -271,15 +335,52 @@ async function query(resolver, name, type) {
     .map((a) => a.data.replace(/^"+|"+$/g, "").replace(/\.$/, ""));
 }
 
+// NS hostnames AT `name` (not via a CNAME), or null if there are none.
+async function nsLookup(resolver, name) {
+  const r = RESOLVERS[resolver];
+  const resp = await fetch(r.url(name, "NS"), { headers: r.headers });
+  if (!resp.ok) throw new Error(`DoH HTTP ${resp.status}`);
+  const data = await resp.json();
+  const owner = (a) => String(a.name).toLowerCase().replace(/\.$/, "");
+  const hosts = (data.Answer || [])
+    .filter((a) => a.type === TYPE_NUM.NS && owner(a) === name)
+    .map((a) => String(a.data).toLowerCase().replace(/\.$/, ""));
+  return hosts.length ? hosts : null;
+}
+
+// [zone, result] for `domain`: walk up from the domain until a name has NS records.
+async function detect(resolver, domain) {
+  for (const name of zoneCandidates(domain)) {
+    const hosts = await nsLookup(resolver, name);
+    if (hosts) return [name, detectProvider(hosts, NS_TABLE)];
+  }
+  return [null, detectProvider([], NS_TABLE)];
+}
+
+// The one-line provider summary shown above the results and in "Copy results".
+function providerLine(result) {
+  if (!result.nameservers.length) return "DNS provider: unknown (no NS records found)";
+  let names = result.providers.map((p) => p.name).join(" + ") || "unknown";
+  if (result.providers.length && result.unknown) names += " + unknown";
+  const hosts = result.nameservers.map((ns) => clean(ns.host)).join(", ");
+  return `DNS provider: ${names} (nameservers: ${hosts})`;
+}
+
 // --- UI -----------------------------------------------------------------------
 
 const $ = (id) => document.getElementById(id);
 let CFG = null;
+let NS_TABLE = []; // nameservers.json; empty if it fails to load (detection then finds nothing)
 const BIND = "bind"; // the "Show fixes for" value that selects the BIND export
 
 async function loadConfig() {
   const resp = await fetch("records.json");
   CFG = await resp.json();
+  try {
+    NS_TABLE = (await (await fetch("nameservers.json")).json()).providers;
+  } catch {
+    NS_TABLE = []; // provider detection is a convenience; the check still works
+  }
   const sel = $("provider");
   for (const name of Object.keys(CFG.providers).sort()) {
     const opt = document.createElement("option");
@@ -318,11 +419,18 @@ function applyStateFromUrl() {
   if ($("domain").value) $("form").requestSubmit();
 }
 
+// The provider the app picked itself from the nameservers (issue #31), or "".
+// It stays out of the URL, so a shared link detects again for its own domain.
+function autoProvider() {
+  const sel = $("provider");
+  return sel.value && sel.dataset.auto === sel.value ? sel.value : "";
+}
+
 function stateParams() {
   const params = new URLSearchParams();
   const domain = $("domain").value.trim().replace(/\.$/, "");
   if (domain) params.set("domain", domain);
-  if ($("provider").value) params.set("provider", $("provider").value);
+  if ($("provider").value && !autoProvider()) params.set("provider", $("provider").value);
   // Omit the defaults (cloudflare / table) to keep shared URLs tidy.
   if ($("resolver").value && $("resolver").value !== "cloudflare")
     params.set("resolver", $("resolver").value);
@@ -376,15 +484,18 @@ function publicHeader(header) {
   return cut === -1 ? header.replace(/^UNVERIFIED\s*—\s*/, "") : header.slice(cut + 2);
 }
 
-function resultsMarkdown(domain, resolver, passed, rows, url) {
+function resultsMarkdown(domain, resolver, passed, rows, url, providerText = "") {
   const out = [
     `**Thundermail DNS check — ${domain}**`,
     "",
     `${passed} passed, ${rows.length - passed} failed · resolver: ${RESOLVERS[resolver].label}`,
     "",
+  ];
+  if (providerText) out.push(providerText, "");
+  out.push(
     mdRow(["Status", "Record", "Expected", "Found"]),
     mdRow(["---", "---", "---", "---"]),
-  ];
+  );
   for (const r of rows) {
     // A published-but-out-ranked SRV gets its own status word: "FAIL" would send the
     // reader looking for a missing record instead of a competing one.
@@ -535,7 +646,9 @@ async function runCheck(evt) {
   evt.preventDefault();
   const domain = $("domain").value.trim().replace(/\.$/, "");
   if (!domain) return;
-  const provider = $("provider").value;
+  // A provider the app picked itself for an earlier domain is not a user choice:
+  // detect again.
+  let provider = autoProvider() ? "" : $("provider").value;
   const resolver = $("resolver").value;
 
   updateUrl(); // reflect current form state into the (bookmarkable) URL
@@ -544,6 +657,7 @@ async function runCheck(evt) {
     $("results").replaceChildren();
     $("resultsactions").replaceChildren();
     $("fixes").replaceChildren();
+    $("dnsprovider").textContent = "";
     $("summary").textContent = `“${domain}” is not a valid domain name.`;
     return;
   }
@@ -553,6 +667,7 @@ async function runCheck(evt) {
   $("results").replaceChildren();
   $("resultsactions").replaceChildren();
   $("fixes").replaceChildren();
+  $("dnsprovider").textContent = "";
 
   const url = shareUrl(); // captured now, so a later form edit can't skew the copy
   let passed = 0;
@@ -563,6 +678,31 @@ async function runCheck(evt) {
   let groupEl = null;
 
   try {
+    // Find the DNS provider from the nameservers (issue #31). If the user did not
+    // pick a provider, select the detected one in "Show fixes for".
+    let providerText = "";
+    let detected = false;
+    try {
+      const [, result] = await detect(resolver, domain);
+      providerText = providerLine(result);
+      const fixes = fixesFor(result);
+      if (!provider && fixes) {
+        provider = fixes;
+        detected = true;
+      }
+    } catch (e) {
+      providerText = `DNS provider: unknown (lookup error: ${e.message})`;
+    }
+    const sel = $("provider");
+    if (detected) {
+      sel.value = provider;
+      sel.dataset.auto = provider;
+    } else if (!provider) {
+      sel.value = "";
+      delete sel.dataset.auto;
+    }
+    $("dnsprovider").textContent = providerText;
+
     for (const rec of CFG.records) {
       if (rec.type !== currentGroup) {
         currentGroup = rec.type;
@@ -613,7 +753,7 @@ async function runCheck(evt) {
     $("summary").textContent =
       `Result: ${passed} passed, ${failures.length} failed.`;
     $("resultsactions").appendChild(copyButton(
-      "Copy results", resultsMarkdown(domain, resolver, passed, rows, url)));
+      "Copy results", resultsMarkdown(domain, resolver, passed, rows, url, providerText)));
 
     if (provider === BIND) {
       $("fixes").appendChild(el("h2", null, `BIND zone file for ${domain}:`));
@@ -621,7 +761,8 @@ async function runCheck(evt) {
     } else if (failures.length && provider) {
       const format = $("fixformat").value;
       $("fixes").appendChild(
-        el("h2", null, `How to fix ${failures.length} record(s) in ${provider}:`));
+        el("h2", null, `How to fix ${failures.length} record(s) in ${provider}` +
+          `${detected ? " (detected from the nameservers)" : ""}:`));
       $("fixes").appendChild(el("div", "actions")).appendChild(copyButton(
         "Copy fix instructions",
         fixesMarkdown(CFG, provider, domain, failures, format, url)));
@@ -648,5 +789,7 @@ async function runCheck(evt) {
 
 loadConfig().then(() => {
   $("form").addEventListener("submit", runCheck);
+  // Once the user picks a provider, it is their choice, not a detected one.
+  $("provider").addEventListener("change", () => delete $("provider").dataset.auto);
   applyStateFromUrl();
 });

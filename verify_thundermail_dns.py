@@ -23,7 +23,8 @@ Pass --provider to print exactly what to enter in that DNS provider's control
 panel for each FAILING record (accounting for provider quirks such as how the
 Host/Name field is written). The supported providers come from records.json.
 Fixes print as a compact per-type table by default; --fix-format long gives the
-older one-labelled-block-per-record layout.
+older one-labelled-block-per-record layout. --provider auto finds the provider
+from the domain's nameservers (see dns_provider.py) and falls back to generic.
 
 Pass --bind to print all the records as a BIND zone file fragment (no lookups),
 or --bind-failed-only to run the check and print only the failed records as one
@@ -281,6 +282,23 @@ def query(resolver: dns.resolver.Resolver, name: str, rdtype: str) -> list[str]:
     return [sanitize(answer.to_text().strip('"').rstrip(".")) for answer in answers]
 
 
+def auto_provider(domain: str, resolver: dns.resolver.Resolver, say) -> str:
+    """Resolve --provider auto (issue #31): the provider that hosts the domain's DNS,
+    found from its nameservers, or 'generic' with one line that says why."""
+    import dns_provider  # imported here: dns_provider imports this module
+
+    table = dns_provider.load_table()
+    _, result = dns_provider.detect(domain, resolver, table)
+    fixes = dns_provider.fixes_for(result)
+    names = " + ".join(p["name"] for p in result["providers"]) or "unknown"
+    if fixes:
+        say(f"DNS provider: {names} (from the nameservers), showing fixes for {fixes}\n")
+        return fixes
+    say(f"DNS provider: {names}. Showing generic fixes, because "
+        f"{dns_provider.fallback_reason(result)}.\n")
+    return "generic"
+
+
 def main() -> int:
     cfg = json.loads(CONFIG_PATH.read_text())
     providers = sorted(cfg["providers"])
@@ -291,8 +309,10 @@ def main() -> int:
     parser.add_argument("domain", help="domain to check, e.g. glamrocnamecheap.com")
     parser.add_argument(
         "--provider",
-        choices=providers,
-        help="print how to fix each FAILING record in this DNS provider's panel",
+        choices=[*providers, "auto"],
+        help="print how to fix each FAILING record in this DNS provider's panel; "
+        "'auto' finds the provider from the domain's nameservers (nameservers.json) "
+        "and falls back to 'generic'",
     )
     parser.add_argument(
         "--resolver",
@@ -340,6 +360,9 @@ def main() -> int:
     resolver = build_resolver(args.resolver)
 
     say(f"Verifying Thundermail DNS for {domain} (resolver {sanitize(args.resolver)})\n")
+
+    if args.provider == "auto":
+        args.provider = auto_provider(domain, resolver, say)
 
     passed = 0
     failures = []

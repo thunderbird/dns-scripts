@@ -10,7 +10,8 @@
 // is a trailing `loadConfig().then(...)`. We stub `fetch` to stay pending forever,
 // so that promise never resolves and its DOM-touching callback never fires; the
 // function declarations we need (checkAnswers / failureText / interpolate /
-// resolveRecord / valueOf / bindQuote / bindZone)
+// resolveRecord / valueOf / bindQuote / bindZone / detectProvider / fixesFor /
+// zoneCandidates)
 // are left on the sandbox global, closures over the top-level consts intact.
 
 import fs from "node:fs";
@@ -41,13 +42,14 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(appSrc, sandbox, { filename: "app.js" });
 
-const { checkAnswers, failureText, interpolate, resolveRecord, bindQuote, bindZone } = sandbox;
+const { checkAnswers, failureText, interpolate, resolveRecord, bindQuote, bindZone,
+        detectProvider, fixesFor, zoneCandidates } = sandbox;
 const valueOf = sandbox.valueOf; // own global prop shadows Object.prototype.valueOf
 
-const { cfg, matchCases, resolveCases, bindQuoteCases, bindZoneCases } =
-  JSON.parse(fs.readFileSync(0, "utf8"));
+const { cfg, matchCases, resolveCases, bindQuoteCases, bindZoneCases,
+        nsTable, nameserverCases, zoneCandidateCases } = JSON.parse(fs.readFileSync(0, "utf8"));
 
-const out = { match: [], resolve: [], bindQuote: [], bindZone: [] };
+const out = { match: [], resolve: [], bindQuote: [], bindZone: [], nameservers: [], zones: [] };
 
 for (const c of matchCases) {
   const status = checkAnswers(c.expected, c.answers, c.mode);
@@ -79,5 +81,12 @@ for (const c of bindZoneCases) {
   const records = c.hosts === null ? cfg.records : cfg.records.filter((r) => c.hosts.includes(r.host));
   out.bindZone.push(bindZone(cfg, c.domain, records, c.failedOnly));
 }
+
+for (const c of nameserverCases) {
+  const result = detectProvider(c.hosts, nsTable);
+  out.nameservers.push({ result, fixes: fixesFor(result) });
+}
+
+for (const d of zoneCandidateCases) out.zones.push(zoneCandidates(d));
 
 process.stdout.write(JSON.stringify(out));

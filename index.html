@@ -7,7 +7,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Defense-in-depth: lock scripts to same-origin, network to the two DoH
-       endpoints (+ same-origin records.json). GitHub Pages can't set headers,
+       endpoints (+ same-origin records.json and nameservers.json). GitHub Pages can't set headers,
        so this is delivered as a meta tag. -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' https://cloudflare-dns.com https://dns.google; img-src 'self'; base-uri 'none'; form-action 'none'">
@@ -46,6 +46,7 @@
     }
     button:disabled { opacity: .6; cursor: default; }
     #summary { font-weight: 600; margin: 1rem 0 .5rem; }
+    .dnsprovider { color: var(--muted); font-size: .9rem; margin: 0 0 .5rem; word-break: break-word; }
     .actions:not(:empty) { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 .75rem; }
     button.copy {
       background: none; color: var(--accent); border: 1px solid var(--border);
@@ -112,7 +113,7 @@
       <div>
         <label for="provider">Show fixes for</label>
         <select id="provider">
-          <option value="">— (don't show fixes)</option>
+          <option value="">Auto-detect (from nameservers)</option>
         </select>
       </div>
       <div>
@@ -134,6 +135,7 @@
     </form>
 
     <div id="summary" aria-live="polite"></div>
+    <div id="dnsprovider" class="dnsprovider"></div>
     <div id="resultsactions" class="actions"></div>
     <div id="results"></div>
     <div id="fixes" class="fixes"></div>

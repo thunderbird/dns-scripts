@@ -14,6 +14,7 @@ You need:
   types the panel supports.
 - If you can get it, a screenshot of the record list with some records in it.
 - The provider's nameservers. Run `dig NS <domain>` on a domain at that provider.
+  They go into `nameservers.json`, so that "Auto-detect" finds the provider.
 - A domain at that provider to test with, for example from the support ticket.
 
 If you only have the help pages, Claude can still add the provider. The fix
