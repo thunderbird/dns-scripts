@@ -55,6 +55,15 @@ domain's DNS from its NS records: `dns_provider.py` (CLI) and the same logic in
   ("Beispiel: SIP (ohne Unterstrich)"). Like the
   rest of the interpreter, the split is **duplicated in both Python and JS — keep it
   identical.**
+- **Record needs (issue #28).** Each record in `records.json` carries `need`
+  (`required` = MX + the 3 DKIM CNAMEs; `recommended` = SPF, DMARC; `optional` = the 5
+  SRV, MTA-STS, TLSRPT) and a plain-English `purpose`. The CLI exits `0` when no
+  **required** record fails (decision 4 in the #28 body; it used to be all 13). Rows show a
+  `(recommended)`/`(optional)` tag; required rows get none. `tagged_label()`/`result_summary()`
+  in Python and `taggedLabel()`/`resultSummary()` in JS are **duplicated — keep them
+  identical** (`needCases` in the parity fixture). Purpose text: CLI `--explain`; web
+  *Explain each record* checkbox (a class on `#results`, not URL state); copied results
+  table has a `Need` column. tm3's purpose ("may use in the future") is Roland's wording.
 - **SRV is checked relationally, not against a literal.** `value_templates.SRV.match_mode`
   is `srv_lowest_priority`: port/target must match exactly (preserving the #10 fix), the
   **weight is not compared at all**, and the **priority is compared against the other
@@ -422,7 +431,8 @@ uv run verify_thundermail_dns.py <domain> --provider auto
 python3 -m http.server 8000               # then open http://localhost:8000/
 ```
 
-Exit status is `0` only when all 13 records are present and correct.
+Exit status is `0` when all **required** records are present and correct (see the
+record-needs bullet).
 
 ## Testing
 

@@ -54,8 +54,11 @@ MTA-STS / TLSRPT / DMARC TXT records, and the three DKIM CNAMEs.
 uv run verify_thundermail_dns.py glamrocnamecheap.com
 ```
 
-Exit status is `0` only when every expected record is present and correct, so it's
-safe to use in scripts or CI. **SRV is the one type checked relationally rather than
+Exit status is `0` when every **required** record is present and correct, so it's
+safe to use in scripts or CI. Only the MX record and the three DKIM CNAMEs are
+required. SPF and DMARC are recommended, and the SRV records, MTA-STS and TLSRPT are
+optional ([#28](https://github.com/thunderbird/dns-scripts/issues/28)). The results tag
+them `(recommended)` or `(optional)`, and `--explain` prints what each record is for. **SRV is the one type checked relationally rather than
 against a literal.** Port and target must match exactly, but the **weight is not
 compared at all** (it only distributes load between competing targets at the same
 priority, and Thundermail publishes a single target per service — while some panels,

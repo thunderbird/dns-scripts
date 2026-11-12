@@ -51,5 +51,11 @@
     {"name": "two suffixes of one provider", "hosts": ["dns200.anycast.me", "ns104.ovh.net"], "expectKeys": ["ovh"], "expectIssue": false, "expectFixes": "ovh"},
     {"name": "no nameservers", "hosts": [], "expectKeys": [], "expectIssue": false, "expectFixes": null}
   ],
-  "zoneCandidateCases": ["mail.example.com", "example.com", "a.b.example.co.uk", "Example.COM.", "com"]
+  "zoneCandidateCases": ["mail.example.com", "example.com", "a.b.example.co.uk", "Example.COM.", "com"],
+  "needCases": [
+    {"record": {"host": "@", "need": "required"}, "failed": []},
+    {"record": {"host": "_jmap._tcp", "need": "optional"}, "failed": ["optional", "recommended", "optional"]},
+    {"record": {"host": "@", "label": "@ (SPF)", "need": "recommended"}, "failed": ["optional", "required"]},
+    {"record": {"host": "tm1._domainkey"}, "failed": ["required", "required", "recommended"]}
+  ]
 }

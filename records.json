@@ -1,19 +1,19 @@
 {
   "mail_target": "mail.thundermail.com",
   "records": [
-    {"type": "MX", "host": "@", "priority": 10, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_jmap._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_caldavs._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_carddavs._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_imaps._tcp", "priority": 0, "weight": 0, "port": 993, "target": "mail.thundermail.com"},
-    {"type": "SRV", "host": "_submission._tcp", "priority": 0, "weight": 0, "port": 587, "target": "mail.thundermail.com"},
-    {"type": "TXT", "host": "@", "label": "@ (SPF)", "value": "v=spf1 include:spf.thundermail.com -all", "match": "v=spf1 include:spf.thundermail.com -all"},
-    {"type": "TXT", "host": "_mta-sts", "value": "v=STSv1; id=18139500144460329770", "match": "v=STSv1;"},
-    {"type": "TXT", "host": "_smtp._tls", "value": "v=TLSRPTv1; rua=mailto:postmaster@{domain}", "match": "v=TLSRPTv1;"},
-    {"type": "TXT", "host": "_dmarc", "value": "v=DMARC1; p=none;", "match": "v=DMARC1;"},
-    {"type": "CNAME", "host": "tm1._domainkey", "target": "tm1.{domain}.dkim.thunderhosted.com"},
-    {"type": "CNAME", "host": "tm2._domainkey", "target": "tm2.{domain}.dkim.thunderhosted.com"},
-    {"type": "CNAME", "host": "tm3._domainkey", "target": "tm3.{domain}.dkim.thunderhosted.com"}
+    {"type": "MX", "host": "@", "priority": 10, "target": "mail.thundermail.com", "need": "required", "purpose": "Sends incoming mail for your domain to the Thundermail mail server."},
+    {"type": "SRV", "host": "_jmap._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com", "need": "optional", "purpose": "Lets mail apps find the JMAP server, which syncs mail, calendars, and contacts."},
+    {"type": "SRV", "host": "_caldavs._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com", "need": "optional", "purpose": "Lets calendar apps find the CalDAV server (over TLS) and sync calendars and events."},
+    {"type": "SRV", "host": "_carddavs._tcp", "priority": 0, "weight": 0, "port": 443, "target": "mail.thundermail.com", "need": "optional", "purpose": "Lets address book apps find the CardDAV server (over TLS) and sync contacts."},
+    {"type": "SRV", "host": "_imaps._tcp", "priority": 0, "weight": 0, "port": 993, "target": "mail.thundermail.com", "need": "optional", "purpose": "Lets mail apps find the IMAP server (over TLS) that they read incoming mail from."},
+    {"type": "SRV", "host": "_submission._tcp", "priority": 0, "weight": 0, "port": 587, "target": "mail.thundermail.com", "need": "optional", "purpose": "Lets mail apps find the SMTP server that sends your outgoing mail."},
+    {"type": "TXT", "host": "@", "label": "@ (SPF)", "value": "v=spf1 include:spf.thundermail.com -all", "match": "v=spf1 include:spf.thundermail.com -all", "need": "recommended", "purpose": "SPF: lists the servers that can send mail for your domain, so that others cannot fake your address. Without it, your mail can go to spam."},
+    {"type": "TXT", "host": "_mta-sts", "value": "v=STSv1; id=18139500144460329770", "match": "v=STSv1;", "need": "optional", "purpose": "MTA-STS: tells other mail servers that mail to your domain must use TLS encryption. It works with a policy file on a web server."},
+    {"type": "TXT", "host": "_smtp._tls", "value": "v=TLSRPTv1; rua=mailto:postmaster@{domain}", "match": "v=TLSRPTv1;", "need": "optional", "purpose": "TLSRPT: gives an address for reports from other mail servers about TLS or MTA-STS delivery problems."},
+    {"type": "TXT", "host": "_dmarc", "value": "v=DMARC1; p=none;", "match": "v=DMARC1;", "need": "recommended", "purpose": "DMARC: tells other mail servers what to do with mail that fails SPF and DKIM checks, and where to send reports. Without it, your mail can go to spam."},
+    {"type": "CNAME", "host": "tm1._domainkey", "target": "tm1.{domain}.dkim.thunderhosted.com", "need": "required", "purpose": "DKIM key (rsa-sha256). DKIM proves that your messages did not change on the way to the recipient."},
+    {"type": "CNAME", "host": "tm2._domainkey", "target": "tm2.{domain}.dkim.thunderhosted.com", "need": "required", "purpose": "DKIM key (ed25519-sha256). DKIM proves that your messages did not change on the way to the recipient."},
+    {"type": "CNAME", "host": "tm3._domainkey", "target": "tm3.{domain}.dkim.thunderhosted.com", "need": "required", "purpose": "A third DKIM key that Thundermail may use in the future."}
   ],
   "group_headers": {"MX": "MX:", "SRV": "SRV:", "TXT": "TXT:", "CNAME": "CNAME (DKIM):"},
   "value_templates": {

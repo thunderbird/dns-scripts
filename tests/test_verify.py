@@ -257,6 +257,17 @@ class TestRecordsJsonLint(unittest.TestCase):
                         rendered, TOKEN,
                         f"{name}.{rtype} field {label!r} left a token: {rendered!r}")
 
+    def test_every_record_has_a_need_and_a_purpose(self):
+        # Issue #28: each record says how much Thundermail needs it, and what it is for.
+        for rec in CFG["records"]:
+            self.assertIn(rec.get("need"), v.NEEDS, v.label(rec))
+            self.assertTrue(rec.get("purpose", "").strip(), v.label(rec))
+            self.assertNotRegex(rec["purpose"], TOKEN, v.label(rec))
+
+    def test_required_records_match_issue_28(self):
+        required = [v.label(r) for r in CFG["records"] if v.need_of(r) == "required"]
+        self.assertEqual(required, ["@", "tm1._domainkey", "tm2._domainkey", "tm3._domainkey"])
+
     def test_headers_have_no_unsubstituted_tokens(self):
         # Headers are printed verbatim (never interpolated), so any {token} in one
         # is a bug that would leak to the user.
@@ -358,6 +369,26 @@ class TestBindZone(unittest.TestCase):
             ctx = build_ctx(next(r for r in CFG["records"] if r["type"] == rtype))
             for tok in TOKEN.findall(tpl):
                 self.assertIn(tok, ctx, f"bind.rdata.{rtype}: unknown token {{{tok}}}")
+
+
+class TestNeeds(unittest.TestCase):
+    """Issue #28: required / recommended / optional records."""
+
+    def test_tagged_label(self):
+        self.assertEqual(v.tagged_label({"host": "@", "need": "required"}), "@")
+        self.assertEqual(v.tagged_label({"host": "_jmap._tcp", "need": "optional"}),
+                         "_jmap._tcp (optional)")
+        self.assertEqual(v.tagged_label({"host": "@", "label": "@ (SPF)", "need": "recommended"}),
+                         "@ (SPF) (recommended)")
+        self.assertEqual(v.tagged_label({"host": "x"}), "x")  # no need = required
+
+    def test_result_summary(self):
+        self.assertEqual(v.result_summary(13, []), "Result: 13 passed, 0 failed.")
+        self.assertEqual(v.result_summary(10, ["optional", "recommended", "optional"]),
+                         "Result: 10 passed, 3 failed (1 recommended, 2 optional). "
+                         "All required records pass.")
+        self.assertEqual(v.result_summary(11, ["optional", "required"]),
+                         "Result: 11 passed, 2 failed (1 required, 1 optional).")
 
 
 if __name__ == "__main__":

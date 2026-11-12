@@ -13,7 +13,10 @@ Usage:
     uv run verify_thundermail_dns.py glamrocnamecheap.com --provider namecheap
     uv run verify_thundermail_dns.py example.com --bind > example.com.thundermail.zone
 
-Exit status is 0 only if every expected record is present and correct. SRV is
+Exit status is 0 when every REQUIRED record (MX and the three DKIM CNAMEs) is
+present and correct, even if recommended or optional records fail (issue #28; the
+`need` of each record is in records.json). --explain prints what each record is
+for. SRV is
 checked relationally rather than against a literal (thunderbird-accounts#1163):
 the port and target must match exactly, the weight is not compared at all, and the
 priority only has to be a LOWER number than any other target at that name — see
@@ -97,6 +100,35 @@ def cap(s: str) -> str:
 
 def label(rec: dict) -> str:
     return rec.get("label", rec["host"])
+
+
+# Record needs (issue #28), most important first. A record without "need" is
+# required. (Kept in sync with app.js.)
+NEEDS = ("required", "recommended", "optional")
+
+
+def need_of(rec: dict) -> str:
+    return rec.get("need", "required")
+
+
+def tagged_label(rec: dict) -> str:
+    """The record label, with "(recommended)" or "(optional)" after it. Required
+    records get no tag. Kept in sync with taggedLabel() in app.js."""
+    need = need_of(rec)
+    return label(rec) if need == "required" else f"{label(rec)} ({need})"
+
+
+def result_summary(passed: int, failed_needs: list[str]) -> str:
+    """The Result line: counts, the failures per need, and whether the required
+    records pass. Kept in sync with resultSummary() in app.js."""
+    text = f"Result: {passed} passed, {len(failed_needs)} failed"
+    if not failed_needs:
+        return text + "."
+    counts = [f"{failed_needs.count(n)} {n}" for n in NEEDS if n in failed_needs]
+    text += f" ({', '.join(counts)})."
+    if "required" not in failed_needs:
+        text += " All required records pass."
+    return text
 
 
 def resolve_record(rec: dict, domain: str) -> dict:
@@ -331,6 +363,11 @@ def main() -> int:
         "(one labelled block per record)",
     )
     parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="print what each record is for under its result",
+    )
+    parser.add_argument(
         "--bind",
         action="store_true",
         help="print all the Thundermail records as a BIND zone file fragment and exit "
@@ -371,6 +408,7 @@ def main() -> int:
     passed = 0
     failures = []
     failed_records = []  # raw records, for --bind-failed-only
+    failed_needs = []
     current_group = None
     for rec in cfg["records"]:
         if rec["type"] != current_group:
@@ -388,16 +426,19 @@ def main() -> int:
         mode = cfg["value_templates"][rec["type"]].get("match_mode", "contains")
         status = check_answers(expected, answers, mode)
         if status == "ok":
-            say(f"  {GREEN}OK{RESET}   {label(rec):<46} {shown}")
+            say(f"  {GREEN}OK{RESET}   {tagged_label(rec):<46} {shown}")
             passed += 1
         else:
-            say(f"  {RED}FAIL{RESET} {label(rec):<46} "
+            say(f"  {RED}FAIL{RESET} {tagged_label(rec):<46} "
                   f"{failure_text(mode, status, expected)}")
             say(f"       {'':<46} got: {shown or '<empty>'}")
             failures.append(ctx)
             failed_records.append(rec)
+            failed_needs.append(need_of(rec))
+        if args.explain and rec.get("purpose"):
+            say(f"       {rec['purpose']}")
 
-    say(f"\nResult: {passed} passed, {len(failures)} failed.")
+    say("\n" + result_summary(passed, failed_needs))
 
     if failures and args.provider:
         say(f"\n{BOLD}How to fix {len(failures)} record(s) in {args.provider}:{RESET}")
@@ -424,7 +465,7 @@ def main() -> int:
         else:
             say("\nNothing failed: there are no records to export.")
 
-    return 0 if not failures else 1
+    return 1 if "required" in failed_needs else 0
 
 
 if __name__ == "__main__":

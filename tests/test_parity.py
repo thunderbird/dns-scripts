@@ -59,7 +59,10 @@ def python_results() -> dict:
                             "reason": dp.fallback_reason(result), "wantsIssue": wants,
                             "issue": dp.issue_text(result) if wants else None})
     zones = [dp.zone_candidates(d) for d in CASES["zoneCandidateCases"]]
-    return {"match": match, "resolve": resolve,
+    needs = [{"label": v.tagged_label(c["record"]),
+              "summary": v.result_summary(13 - len(c["failed"]), c["failed"])}
+             for c in CASES["needCases"]]
+    return {"needs": needs, "match": match, "resolve": resolve,
             "bindQuote": bind_quote, "bindZone": bind_zone,
             "nameservers": nameservers, "zones": zones}
 
@@ -76,6 +79,7 @@ class TestParity(unittest.TestCase):
             "nsTable": NS_TABLE,
             "nameserverCases": CASES["nameserverCases"],
             "zoneCandidateCases": CASES["zoneCandidateCases"],
+            "needCases": CASES["needCases"],
         })
         proc = subprocess.run(
             ["node", str(HARNESS)],
@@ -103,6 +107,7 @@ class TestParity(unittest.TestCase):
         self.assertEqual(js["nameservers"], py["nameservers"],
                          "detect_provider()/fixes_for()/fallback_reason()/wants_issue()/issue_text() diverged")
         self.assertEqual(js["zones"], py["zones"], "zone_candidates() diverged")
+        self.assertEqual(js["needs"], py["needs"], "tagged_label()/result_summary() diverged")
 
 
 if __name__ == "__main__":

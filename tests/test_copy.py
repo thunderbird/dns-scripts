@@ -97,17 +97,17 @@ PROVIDER_TEXT = ("DNS provider: Porkbun (nameservers: curitiba.ns.porkbun.com, "
                  "fortaleza.ns.porkbun.com)")
 
 RESULTS_ROWS = [
-    {"ok": False, "status": "missing", "record": "MX @",
+    {"ok": False, "status": "missing", "record": "MX @", "need": "required",
      "expected": "10 mail.thundermail.com", "found": "(nothing)"},
-    {"ok": True, "status": "ok", "record": "SRV _jmap._tcp",
+    {"ok": True, "status": "ok", "record": "SRV _jmap._tcp", "need": "optional",
      "expected": "0 0 443 mail.thundermail.com" + SRV_NOTE,
      "found": "0 5 443 mail.thundermail.com"},
     # Published, but tied with a competing target (accounts#1163) — its own status
     # word, since "FAIL" would send the reader hunting for a missing record.
-    {"ok": False, "status": "conflict", "record": "SRV _imaps._tcp",
+    {"ok": False, "status": "conflict", "record": "SRV _imaps._tcp", "need": "optional",
      "expected": "0 0 993 mail.thundermail.com" + SRV_NOTE,
      "found": "0 0 993 mail.thundermail.com / 0 0 993 mail.example.net"},
-    {"ok": True, "status": "ok", "record": "TXT @ (SPF)",
+    {"ok": True, "status": "ok", "record": "TXT @ (SPF)", "need": "recommended",
      "expected": "v=spf1 include:spf.thundermail.com -all (must contain)",
      "found": "v=spf1 include:spf.thundermail.com -all"},
 ]
@@ -218,14 +218,14 @@ class TestCopyText(unittest.TestCase):
         lines = self.out["results"].splitlines()
         self.assertEqual(lines[0], "**Thundermail DNS check — example.com**")
         self.assertIn("2 passed, 2 failed · resolver: Cloudflare (1.1.1.1)", lines)
-        self.assertIn("| Status | Record | Expected | Found |", lines)
-        self.assertIn("| --- | --- | --- | --- |", lines)
-        self.assertIn("| **FAIL** | MX @ | 10 mail.thundermail.com | (nothing) |", lines)
+        self.assertIn("| Status | Record | Need | Expected | Found |", lines)
+        self.assertIn("| --- | --- | --- | --- | --- |", lines)
+        self.assertIn("| **FAIL** | MX @ | required | 10 mail.thundermail.com | (nothing) |", lines)
         self.assertIn(
-            f"| OK | SRV _jmap._tcp | 0 0 443 mail.thundermail.com{SRV_NOTE} "
+            f"| OK | SRV _jmap._tcp | optional | 0 0 443 mail.thundermail.com{SRV_NOTE} "
             "| 0 5 443 mail.thundermail.com |", lines)
         self.assertIn(
-            f"| **CONFLICT** | SRV _imaps._tcp | 0 0 993 mail.thundermail.com{SRV_NOTE} "
+            f"| **CONFLICT** | SRV _imaps._tcp | optional | 0 0 993 mail.thundermail.com{SRV_NOTE} "
             "| 0 0 993 mail.thundermail.com / 0 0 993 mail.example.net |", lines)
         # One row per record, plus header + separator.
         self.assertEqual(len([l for l in lines if l.startswith("|")]),
@@ -238,7 +238,7 @@ class TestCopyText(unittest.TestCase):
         lines = self.out["resultsWithProvider"].splitlines()
         self.assertEqual(lines[4], PROVIDER_TEXT)
         self.assertEqual(lines[5], "")
-        self.assertEqual(lines[6], "| Status | Record | Expected | Found |")
+        self.assertEqual(lines[6], "| Status | Record | Need | Expected | Found |")
 
     # --- provider.html copy (#32) --------------------------------------------
 

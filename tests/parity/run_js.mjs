@@ -11,7 +11,7 @@
 // so that promise never resolves and its DOM-touching callback never fires; the
 // function declarations we need (checkAnswers / failureText / interpolate /
 // resolveRecord / valueOf / bindQuote / bindZone / detectProvider / fixesFor /
-// zoneCandidates / fallbackReason / wantsIssue / issueText)
+// zoneCandidates / fallbackReason / wantsIssue / issueText / taggedLabel / resultSummary)
 // are left on the sandbox global, closures over the top-level consts intact.
 
 import fs from "node:fs";
@@ -44,13 +44,13 @@ vm.runInContext(appSrc, sandbox, { filename: "app.js" });
 
 const { checkAnswers, failureText, interpolate, resolveRecord, bindQuote, bindZone,
         detectProvider, fixesFor, zoneCandidates, fallbackReason, wantsIssue,
-        issueText } = sandbox;
+        issueText, taggedLabel, resultSummary } = sandbox;
 const valueOf = sandbox.valueOf; // own global prop shadows Object.prototype.valueOf
 
 const { cfg, matchCases, resolveCases, bindQuoteCases, bindZoneCases,
-        nsTable, nameserverCases, zoneCandidateCases } = JSON.parse(fs.readFileSync(0, "utf8"));
+        nsTable, nameserverCases, zoneCandidateCases, needCases } = JSON.parse(fs.readFileSync(0, "utf8"));
 
-const out = { match: [], resolve: [], bindQuote: [], bindZone: [], nameservers: [], zones: [] };
+const out = { needs: [], match: [], resolve: [], bindQuote: [], bindZone: [], nameservers: [], zones: [] };
 
 for (const c of matchCases) {
   const status = checkAnswers(c.expected, c.answers, c.mode);
@@ -93,5 +93,9 @@ for (const c of nameserverCases) {
 }
 
 for (const d of zoneCandidateCases) out.zones.push(zoneCandidates(d));
+
+for (const c of needCases) {
+  out.needs.push({ label: taggedLabel(c.record), summary: resultSummary(13 - c.failed.length, c.failed) });
+}
 
 process.stdout.write(JSON.stringify(out));

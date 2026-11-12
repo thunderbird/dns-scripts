@@ -55,6 +55,33 @@ function labelOf(rec) {
   return rec.label ?? rec.host;
 }
 
+// Record needs (issue #28), most important first. A record without "need" is
+// required. (Kept in sync with the CLI.)
+const NEEDS = ["required", "recommended", "optional"];
+
+function needOf(rec) {
+  return rec.need ?? "required";
+}
+
+// The record label, with "(recommended)" or "(optional)" after it. Required
+// records get no tag. Kept in sync with tagged_label() in the CLI.
+function taggedLabel(rec) {
+  const need = needOf(rec);
+  return need === "required" ? labelOf(rec) : `${labelOf(rec)} (${need})`;
+}
+
+// The Result line: counts, the failures per need, and whether the required
+// records pass. Kept in sync with result_summary() in the CLI.
+function resultSummary(passed, failedNeeds) {
+  let text = `Result: ${passed} passed, ${failedNeeds.length} failed`;
+  if (!failedNeeds.length) return text + ".";
+  const counts = NEEDS.filter((n) => failedNeeds.includes(n))
+    .map((n) => `${failedNeeds.filter((f) => f === n).length} ${n}`);
+  text += ` (${counts.join(", ")}).`;
+  if (!failedNeeds.includes("required")) text += " All required records pass.";
+  return text;
+}
+
 function resolveRecord(rec, domain) {
   const host = rec.host;
   const ctx = {};
@@ -562,14 +589,14 @@ function resultsMarkdown(domain, resolver, passed, rows, url, providerText = "")
   ];
   if (providerText) out.push(providerText, "");
   out.push(
-    mdRow(["Status", "Record", "Expected", "Found"]),
-    mdRow(["---", "---", "---", "---"]),
+    mdRow(["Status", "Record", "Need", "Expected", "Found"]),
+    mdRow(["---", "---", "---", "---", "---"]),
   );
   for (const r of rows) {
     // A published-but-out-ranked SRV gets its own status word: "FAIL" would send the
     // reader looking for a missing record instead of a competing one.
     const status = r.ok ? "OK" : r.status === "conflict" ? "**CONFLICT**" : "**FAIL**";
-    out.push(mdRow([status, r.record, mdCell(r.expected), mdCell(r.found)]));
+    out.push(mdRow([status, r.record, r.need, mdCell(r.expected), mdCell(r.found)]));
   }
   out.push("", `Re-check: ${url}`);
   return out.join("\n");
@@ -704,6 +731,20 @@ function bindSection(domain, failedRecords) {
   return wrap;
 }
 
+// "Explain each record" (issue #28): shows or hides the purpose line under each
+// record. The choice is kept on #results, so a new check keeps it.
+function explainToggle() {
+  const box = el("input");
+  box.type = "checkbox";
+  box.id = "explain";
+  box.checked = $("results").classList.contains("explain");
+  box.addEventListener("change", () => $("results").classList.toggle("explain", box.checked));
+  const label = el("label", "inline");
+  label.htmlFor = "explain";
+  label.append(box, " Explain each record");
+  return label;
+}
+
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -742,6 +783,7 @@ async function runCheck(evt) {
   let passed = 0;
   const failures = [];
   const failedRecords = []; // raw records, for the "Only failed records" BIND export
+  const failedNeeds = []; // need of each failed record, for the Result line (issue #28)
   const rows = []; // one entry per record, for the copyable results table
   let currentGroup = null;
   let groupEl = null;
@@ -813,7 +855,8 @@ async function runCheck(evt) {
       const ok = status === "ok";
       const row = el("div", "row");
       row.appendChild(el("span", `badge ${ok ? "ok" : "fail"}`, ok ? "OK" : "FAIL"));
-      row.appendChild(el("span", "rlabel", labelOf(rec)));
+      const rlabel = row.appendChild(el("span", "rlabel", labelOf(rec)));
+      if (needOf(rec) !== "required") rlabel.appendChild(el("span", "need", ` (${needOf(rec)})`));
       if (ok) {
         row.appendChild(el("span", "rval", cap(actual)));
         passed++;
@@ -822,21 +865,25 @@ async function runCheck(evt) {
           `${failureText(mode, status, expected)}  —  got: ${cap(actual) || "(nothing)"}`));
         failures.push(ctx);
         failedRecords.push(rec);
+        failedNeeds.push(needOf(rec));
       }
       groupEl.appendChild(row);
+      // What the record is for, shown when "Explain each record" is checked.
+      if (rec.purpose) groupEl.appendChild(el("div", "purpose", rec.purpose));
       rows.push({
         ok,
         status,
         record: `${rec.type} ${labelOf(rec)}`,
+        need: needOf(rec),
         expected: `${expected}${MATCH_NOTES[mode] ?? " (must contain)"}`,
         found: cap(actual) || "(nothing)",
       });
     }
 
-    $("summary").textContent =
-      `Result: ${passed} passed, ${failures.length} failed.`;
+    $("summary").textContent = resultSummary(passed, failedNeeds);
     $("resultsactions").appendChild(copyButton(
       "Copy results", resultsMarkdown(domain, resolver, passed, rows, url, providerText)));
+    $("resultsactions").appendChild(explainToggle());
 
     if (provider === BIND) {
       $("fixes").appendChild(el("h2", null, `BIND zone file for ${domain}:`));

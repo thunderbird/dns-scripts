@@ -659,4 +659,16 @@ as Markdown, and `provider.html?domain=example.com` runs the lookup when the pag
 opens. The checker page links to it. The page reuses the detection code in `app.js`,
 so the parity tests cover it.
 
+### Required, recommended, and optional records (2026-11-12)
+
+Each record now says how much Thundermail needs it
+([#28](https://github.com/thunderbird/dns-scripts/issues/28)). The MX record and the
+three DKIM CNAMEs are required. SPF and DMARC are recommended, because without them
+mail can go to spam. The SRV records, MTA-STS, and TLSRPT are optional. The results
+show `(recommended)` or `(optional)` after the record name, and the Result line counts
+the failures per level. The CLI now exits `0` when all required records pass.
+`records.json` also holds a short text for each record that says what it is for:
+`--explain` prints it in the CLI, and **Explain each record** shows it on the web page.
+The copied results table has a new `Need` column.
+
 </details>
