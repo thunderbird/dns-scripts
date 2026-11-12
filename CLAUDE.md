@@ -253,6 +253,22 @@ domain's DNS from its NS records: `dns_provider.py` (CLI) and the same logic in
   `--resolver`; verify target `cloudflare.example.com`. Note the layering: `porkbun`'s DNS is
   Cloudflare-backed and some `cosmotown` nameservers are Cloudflare-fronted, but those
   panels are their own thing — only this block is the Cloudflare dashboard.
+  `easydns` (issue #34, TBPRO ticket 10945) — MX and SRV forms from live screenshots;
+  **TXT/CNAME labels (`CONTENT`) are guesses from the record list, so those two headers
+  keep `UNVERIFIED —`**. Single *Add Record* form with a `TYPE` dropdown; apex `HOST` is
+  **`@`** (`{host}`). SRV splits `SERVICE` (`{service}`, with the underscore) / `PROTO`
+  (dropdown, literal `TCP`) / `HOST` (auto-filled from the two) / `PRIO`/`WEIGHT`/`PORT`/
+  `TARGET`. The defining quirk: **easyDNS refuses the SRV records** ("CNAME target not
+  allowed for SRV") because `mail.thundermail.com` is a CNAME (RFC 2782); without the dot
+  it says "No records set for this host". So the SRV block, like `cosmotown`'s, tells the
+  user the records are optional (#28) and to skip them or ask support. The **MX with the
+  same target saves** (the subscriber confirmed it; RFC 2181 would also forbid it, but
+  easyDNS doesn't test MX), entered without a trailing dot. CNAME target is emitted
+  `{target}.` (unconfirmed, safe either way), and the header says pick CNAME, not the
+  panel's separate `DKIM` type. The real fix is upstream: an A/AAAA SRV target (accounts
+  repo). Nameservers `dns1.easydns.com`/`dns2.easydns.net`/`dns3.easydns.org`/
+  `dns4.easydns.info` (and `.ca`), so `--resolver dns1.easydns.com`; verify target
+  `easydns.example.com`.
 - **BIND zone file export (issue #23).** Both front-ends can print the records as a
   BIND zone file fragment: `$ORIGIN` + one line per record, **no `SOA`/`NS`/`$TTL`**
   (the importing zone's default TTL applies). The strings live in the top-level

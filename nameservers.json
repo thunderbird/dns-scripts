@@ -17,6 +17,8 @@
      "suffixes": ["digitalocean.com"]},
     {"key": "metanet-plesk", "name": "METANET (Plesk)", "fixes": "metanet-plesk", "verified": true,
      "suffixes": ["metanet.ch"]},
+    {"key": "easydns", "name": "easyDNS", "fixes": "easydns", "verified": true,
+     "suffixes": ["easydns.com", "easydns.net", "easydns.org", "easydns.info", "easydns.ca"]},
     {"key": "cosmotown", "name": "Cosmotown", "fixes": "cosmotown", "verified": true,
      "suffixes": ["cosmotown.com"]},
     {"key": "ovh", "name": "OVHcloud", "fixes": "ovh",

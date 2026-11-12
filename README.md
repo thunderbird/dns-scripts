@@ -139,6 +139,7 @@ Protocol fields. "Trailing dot" tells you if targets must end with a `.`.
 | `porkbun`       | blank     | one field                  | no           | no       |
 | `metanet-plesk` | blank     | split, no underscore       | no           | TXT only |
 | `cloudflare`    | `@`       | one field                  | no           | yes      |
+| `easydns`       | `@`       | split (SRV not saved)      | CNAME only   | MX, SRV  |
 | `generic`       | full name | full name                  | no           | n/a      |
 
 "Verified" means that a person compared the field names with the live panel or
@@ -188,6 +189,13 @@ each block with `UNVERIFIED —`, so compare the field names with your panel. Th
   default, *Proxied*, breaks DKIM. Each zone has its own nameservers, so run
   `dig NS <domain>` before you use `--resolver <name>.ns.cloudflare.com`
   ([Cloudflare: create DNS records](https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-dns-records/)).
+- `easydns`: easyDNS does not save the five SRV records. It says "CNAME target not
+  allowed for SRV", because `mail.thundermail.com` is a CNAME
+  ([#34](https://github.com/thunderbird/dns-scripts/issues/34)). The SRV records are
+  optional, so the output tells you to skip them or ask easyDNS support. The MX
+  record saves, with no trailing dot. For DKIM, pick the CNAME type, not the DKIM
+  type. The TXT and CNAME field names are not confirmed yet. The nameservers are
+  `dns1.easydns.com` and so on, so `--resolver dns1.easydns.com` asks easyDNS directly.
 - `generic`: This prints the full record name and value for any panel.
 
 </details>

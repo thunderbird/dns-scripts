@@ -81,6 +81,24 @@
         "fields": [["Type", "CNAME"], ["Name", "{host}"], ["Data", "{value}"]]
       }
     },
+    "easydns": {
+      "MX": {
+        "header": "easyDNS → DOMAINS → your domain → DNS Editor → + ADD → TYPE MX. Type @ in HOST for the root domain (the form shows your domain after the box). Enter MAIL SERVER without a trailing dot, then click SAVE. Delete any other MX record on @, for example easyMail's 0 mx.easymail.ca: priority 0 wins over 10, so mail keeps going there while it exists:",
+        "fields": [["TYPE", "MX"], ["HOST", "{host}"], ["MAIL SERVER", "{target}"], ["PREF", "{priority}"]]
+      },
+      "SRV": {
+        "header": "easyDNS does not save these SRV records: it says 'CNAME target not allowed for SRV', because mail.thundermail.com is a CNAME. The SRV records are optional. They only let mail apps find the servers by themselves, so you can skip them and set up your mail app by hand. Or ask easyDNS support to add them. The form, for reference (easyDNS → DOMAINS → your domain → DNS Editor → + ADD → TYPE SRV; HOST fills itself in from SERVICE and PROTO):",
+        "fields": [["TYPE", "SRV"], ["SERVICE", "{service}"], ["PROTO", "TCP"], ["HOST", "{host}"], ["PRIO", "{priority}"], ["WEIGHT", "{weight}"], ["PORT", "{port}"], ["TARGET", "{target}."]]
+      },
+      "TXT": {
+        "header": "UNVERIFIED — confirm the field labels against your panel. easyDNS → DOMAINS → your domain → DNS Editor → + ADD → TYPE TXT. Type @ in HOST for the root domain, then click SAVE. If @ already has an SPF record (v=spf1 …, for example easyMail's), edit it to the value below instead of adding a second one: two SPF records make SPF fail:",
+        "fields": [["TYPE", "TXT"], ["HOST", "{host}"], ["CONTENT", "{value}"]]
+      },
+      "CNAME": {
+        "header": "UNVERIFIED — confirm the field labels against your panel. easyDNS → DOMAINS → your domain → DNS Editor → + ADD → TYPE CNAME (not the separate DKIM type, which holds a key rather than an alias). Enter the target WITH a trailing dot, then click SAVE:",
+        "fields": [["TYPE", "CNAME"], ["HOST", "{host}"], ["CONTENT", "{target}."]]
+      }
+    },
     "cosmotown": {
       "MX": {
         "header": "Cosmotown → Domains → your domain → DNS records → 'MX(Mail Exchange Record)' section → + Quick Add. Leave the Host field blank for the root domain — Cosmotown auto-fills your domain (do NOT type @; the blank Host below is intentional); enter Points to with no trailing period:",

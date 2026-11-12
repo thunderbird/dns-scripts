@@ -24,6 +24,7 @@ and the verification bar every provider is held to.
 | `porkbun`     | 2026-07-23 | **Unverified.** From Porkbun's KB add-record (231) + SRV (109) articles; no-trailing-dot confirmed live on porkbun.example.com. |
 | `metanet-plesk`| 2026-07-28 | **Unverified.** METANET's Plesk panel (German UI). From METANET's Plesk DNS docs + a live SRV form screenshot; no-trailing-dot confirmed live on thundermail.metanet.example.com; MX/CNAME labels not screenshotted. |
 | `cloudflare`  | 2026-08-27 | Field labels for all four types read off live *Add record* dialogs (2026-08-26); no-trailing-dot, bare SRV label and manual TXT quoting confirmed on a live zone. Not yet run end-to-end (13/13). |
+| `easydns`     | 2026-11-12 | MX and SRV forms read off live screenshots (TBPRO ticket 10945). SRV cannot be saved (CNAME target). **TXT/CNAME unverified.** |
 
 <details>
 <summary><h2>⚠️ Pending verification</h2></summary>
@@ -670,5 +671,22 @@ the failures per level. The CLI now exits `0` when all required records pass.
 `records.json` also holds a short text for each record that says what it is for:
 `--explain` prints it in the CLI, and **Explain each record** shows it on the web page.
 The copied results table has a new `Need` column.
+
+### `easydns` (easydns.com) — partly unverified (2026-11-12)
+
+Added from screenshots of the live *Add Record* form in TBPRO ticket 10945
+([#34](https://github.com/thunderbird/dns-scripts/issues/34)). The form has a `TYPE`
+dropdown. The root host is `@`. The SRV form has `SERVICE` (`_jmap`), `PROTO` (a
+`TCP`/`UDP` dropdown), `HOST` (filled in from the two), `PRIO`, `WEIGHT`, `PORT`,
+`TARGET` and `TTL`. The MX form has `HOST`, `MAIL SERVER`, `PREF` and `TTL`.
+
+easyDNS does not save the SRV records. With `mail.thundermail.com.` as the target, it
+says "CNAME target not allowed for SRV", because `mail.thundermail.com` is a CNAME.
+Without the trailing dot, it says "No records set for this host". So the SRV block
+says that the records are optional and tells the user to skip them or ask easyDNS
+support. The MX record with the same target does save, as the subscriber in the
+ticket confirmed, so the MX block is normal. The TXT and CNAME labels (`CONTENT`) are
+guesses from the record list, so those two blocks stay `UNVERIFIED —`. The DKIM block
+says to pick the CNAME type, because the list also shows a separate `DKIM` type.
 
 </details>

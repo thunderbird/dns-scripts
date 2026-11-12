@@ -84,6 +84,7 @@
         <tr><td><code>porkbun</code></td><td>2026-07-23</td><td><strong>Unverified.</strong> From Porkbun's KB add-record (231) + SRV (109) articles; no-trailing-dot confirmed live on porkbun.example.com.</td></tr>
         <tr><td><code>metanet-plesk</code></td><td>2026-07-28</td><td><strong>Unverified.</strong> METANET's Plesk panel (German UI). From METANET's Plesk DNS docs + a live SRV form screenshot; no-trailing-dot confirmed live on thundermail.metanet.example.com; MX/CNAME labels not screenshotted.</td></tr>
         <tr><td><code>cloudflare</code></td><td>2026-08-27</td><td>Field labels for all four types read off live <em>Add record</em> dialogs (2026-08-26); no-trailing-dot, bare SRV label and manual TXT quoting confirmed on a live zone. Not yet run end-to-end (13/13).</td></tr>
+        <tr><td><code>easydns</code></td><td>2026-11-12</td><td>MX and SRV forms read off live screenshots (TBPRO ticket 10945). SRV cannot be saved (CNAME target). <strong>TXT/CNAME unverified.</strong></td></tr>
       </tbody>
     </table>
 
@@ -724,6 +725,25 @@
       holds a short text for each record that says what it is for: <code>--explain</code> prints it in
       the CLI, and <strong>Explain each record</strong> shows it on the web page. The copied results table
       has a new <code>Need</code> column.</p>
+
+      <h3 id="easydns"><code>easydns</code> (easydns.com) — partly unverified (2026-11-12)</h3>
+
+      <p>Added from screenshots of the live <em>Add Record</em> form in TBPRO ticket 10945
+      (<a href="https://github.com/thunderbird/dns-scripts/issues/34">#34</a>). The form has a
+      <code>TYPE</code> dropdown. The root host is <code>@</code>. The SRV form has <code>SERVICE</code>
+      (<code>_jmap</code>), <code>PROTO</code> (a <code>TCP</code>/<code>UDP</code> dropdown), <code>HOST</code>
+      (filled in from the two), <code>PRIO</code>, <code>WEIGHT</code>, <code>PORT</code>, <code>TARGET</code>
+      and <code>TTL</code>. The MX form has <code>HOST</code>, <code>MAIL SERVER</code>, <code>PREF</code> and
+      <code>TTL</code>.</p>
+
+      <p>easyDNS does not save the SRV records. With <code>mail.thundermail.com.</code> as the target, it
+      says "CNAME target not allowed for SRV", because <code>mail.thundermail.com</code> is a CNAME.
+      Without the trailing dot, it says "No records set for this host". So the SRV block says that the
+      records are optional and tells the user to skip them or ask easyDNS support. The MX record with the
+      same target does save, as the subscriber in the ticket confirmed, so the MX block is normal. The TXT
+      and CNAME labels (<code>CONTENT</code>) are guesses from the record list, so those two blocks stay
+      <code>UNVERIFIED —</code>. The DKIM block says to pick the CNAME type, because the list also shows a
+      separate <code>DKIM</code> type.</p>
     </details>
   </main>
 </body>
